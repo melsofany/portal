@@ -545,6 +545,8 @@ import { pool } from "@workspace/db";
 
             // Ensure updated_at always has a DB-level DEFAULT (drizzle-kit push may remove it)
           await client.query(`
+            ALTER TABLE users ALTER COLUMN created_at SET DEFAULT NOW();
+            ALTER TABLE users ALTER COLUMN created_at SET NOT NULL;
             ALTER TABLE users ALTER COLUMN updated_at SET DEFAULT NOW();
             ALTER TABLE users ALTER COLUMN updated_at SET NOT NULL;
           `);
