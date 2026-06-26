@@ -47,6 +47,8 @@ export const supplierQuotationItemPricesTable = pgTable("supplier_quotation_item
   rfqItemId: integer("rfq_item_id").notNull().references(() => supplierQuotationItemsTable.id, { onDelete: "cascade" }),
   unitPrice: numeric("unit_price", { precision: 14, scale: 3 }).notNull().default("0"),
   notes: text("notes").default(""),
+  vatIncluded: text("vat_included").default("no"),
+  deliveryDays: integer("delivery_days"),
 });
 
 export type SupplierQuotation = typeof supplierQuotationsTable.$inferSelect;
