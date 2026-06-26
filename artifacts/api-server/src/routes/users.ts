@@ -6,7 +6,7 @@ import { Router } from "express";
 
   const router = Router();
 
-  // GET /api/users — list all users with employee info
+  // GET /api/users
   router.get("/", async (req, res) => {
     try {
       const users = await db.select({
@@ -18,6 +18,7 @@ import { Router } from "express";
         employeeId: usersTable.employeeId,
         permissions: usersTable.permissions,
         isActive: usersTable.isActive,
+        photoUrl: usersTable.photoUrl,
         createdAt: usersTable.createdAt,
       }).from(usersTable).orderBy(usersTable.id);
       res.json(users);
@@ -27,57 +28,86 @@ import { Router } from "express";
     }
   });
 
-  // POST /api/users — create user
+  // POST /api/users — requires employeeId; auto-generates username from employee number
   router.post("/", async (req, res) => {
     try {
-      const { username, email, password, fullName, role, employeeId, permissions } = req.body;
-      if (!username || !password) {
-        return res.status(400).json({ error: "اسم المستخدم وكلمة المرور مطلوبان" });
+      const { password, employeeId, permissions, role, isActive, photoUrl } = req.body;
+
+      if (!employeeId) {
+        return res.status(400).json({ error: "يجب تحديد الموظف — لا يمكن إنشاء مستخدم بدون ربطه بموظف" });
       }
+      if (!password) {
+        return res.status(400).json({ error: "كلمة المرور مطلوبة" });
+      }
+
+      // Fetch employee to get name, email, number
+      const [employee] = await db.select().from(employeesTable).where(eq(employeesTable.id, Number(employeeId))).limit(1);
+      if (!employee) {
+        return res.status(404).json({ error: "الموظف غير موجود" });
+      }
+      if (!employee.email) {
+        return res.status(400).json({ error: "لا يوجد بريد إلكتروني مسجل لهذا الموظف — يرجى إضافة الإيميل في بيانات الموظف أولاً" });
+      }
+
+      // username = employee number (unique, auto-generated)
+      const username = employee.employeeNumber;
       const passwordHash = await bcrypt.hash(password, 10);
+
       const [user] = await db.insert(usersTable).values({
-        username: username.trim(),
-        email: email?.trim() || null,
-        fullName: fullName?.trim() || "",
+        username,
+        email: employee.email.trim().toLowerCase(),
+        fullName: employee.fullName,
         passwordHash,
         role: role || "user",
-        employeeId: employeeId ? Number(employeeId) : null,
+        employeeId: Number(employeeId),
         permissions: typeof permissions === "object" ? JSON.stringify(permissions) : (permissions || "{}"),
-        isActive: true,
+        isActive: isActive !== undefined ? Boolean(isActive) : true,
+        photoUrl: photoUrl || "",
       }).returning({
         id: usersTable.id, username: usersTable.username, email: usersTable.email,
         fullName: usersTable.fullName, role: usersTable.role, employeeId: usersTable.employeeId,
-        permissions: usersTable.permissions, isActive: usersTable.isActive,
+        permissions: usersTable.permissions, isActive: usersTable.isActive, photoUrl: usersTable.photoUrl,
       });
       res.status(201).json(user);
     } catch (err: any) {
-      if (err?.code === "23505") return res.status(409).json({ error: "اسم المستخدم مستخدم بالفعل" });
+      if (err?.code === "23505") return res.status(409).json({ error: "هذا الموظف لديه حساب مستخدم بالفعل" });
       req.log.error(err, "POST /users failed");
       res.status(500).json({ error: "فشل في إنشاء المستخدم" });
     }
   });
 
-  // PUT /api/users/:id — update user
+  // PUT /api/users/:id
   router.put("/:id", async (req, res) => {
     try {
       const id = Number(req.params.id);
-      const { email, fullName, role, employeeId, permissions, isActive, password } = req.body;
+      const { role, employeeId, permissions, isActive, password, photoUrl } = req.body;
+
       const updates: Record<string, any> = {
-        email: email?.trim() || null,
-        fullName: fullName?.trim() || "",
         role: role || "user",
-        employeeId: employeeId ? Number(employeeId) : null,
         permissions: typeof permissions === "object" ? JSON.stringify(permissions) : (permissions || "{}"),
         isActive: isActive !== undefined ? Boolean(isActive) : true,
+        photoUrl: photoUrl ?? "",
       };
+
+      // If employee changed, re-sync name/email
+      if (employeeId) {
+        const [employee] = await db.select().from(employeesTable).where(eq(employeesTable.id, Number(employeeId))).limit(1);
+        if (employee) {
+          updates.employeeId = Number(employeeId);
+          updates.fullName = employee.fullName;
+          if (employee.email) updates.email = employee.email.trim().toLowerCase();
+        }
+      }
+
       if (password) {
         updates.passwordHash = await bcrypt.hash(password, 10);
-        updates.sessionToken = null; // invalidate sessions
+        updates.sessionToken = null;
       }
+
       const [updated] = await db.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning({
         id: usersTable.id, username: usersTable.username, email: usersTable.email,
         fullName: usersTable.fullName, role: usersTable.role, employeeId: usersTable.employeeId,
-        permissions: usersTable.permissions, isActive: usersTable.isActive,
+        permissions: usersTable.permissions, isActive: usersTable.isActive, photoUrl: usersTable.photoUrl,
       });
       if (!updated) return res.status(404).json({ error: "المستخدم غير موجود" });
       res.json(updated);
