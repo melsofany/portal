@@ -133,6 +133,8 @@ router.post("/:token", async (req, res) => {
       rfqItemId: Number(p.rfqItemId),
       unitPrice: String(parseFloat(p.unitPrice) || 0),
       notes: p.notes?.trim() ?? "",
+      vatIncluded: p.vatIncluded === "yes" ? "yes" : "no",
+      deliveryDays: p.deliveryDays ? Number(p.deliveryDays) : null,
     }));
     await db.insert(supplierQuotationItemPricesTable).values(priceRows);
 
