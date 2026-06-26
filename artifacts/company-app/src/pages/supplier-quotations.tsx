@@ -1501,7 +1501,13 @@ export default function SupplierQuotationsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">{rfq.status}</span>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                        rfq.status === "مكتمل"
+                          ? "bg-green-100 text-green-700"
+                          : rfq.status === "تم التسعير من المورد"
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-blue-100 text-blue-700"
+                      }`}>{rfq.status}</span>
                       {submittedCount > 0 && (
                         <button
                           onClick={() => setAnalysisRfq({ id: rfq.id, rfqNo: rfq.rfqNo })}

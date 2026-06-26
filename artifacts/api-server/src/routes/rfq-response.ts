@@ -147,6 +147,12 @@ router.post("/:token", async (req, res) => {
       })
       .where(eq(supplierQuotationSuppliersTable.id, rfqSupplier.id));
 
+    // Update supplier quotation status to "تم التسعير من المورد"
+    await db
+      .update(supplierQuotationsTable)
+      .set({ status: "تم التسعير من المورد" })
+      .where(eq(supplierQuotationsTable.id, rfq.id));
+
     // Update linked customer quotation status when a supplier responds
     if (rfq.sourceQuotationId) {
       await db

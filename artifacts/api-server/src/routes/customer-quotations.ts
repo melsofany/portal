@@ -352,6 +352,12 @@ router.patch("/:id/pricing", async (req, res) => {
         .update(customerQuotationsTable)
         .set({ status: "مكتمل" })
         .where(eq(customerQuotationsTable.id, id));
+
+      // Also mark all linked supplier quotations as "مكتمل"
+      await db
+        .update(supplierQuotationsTable)
+        .set({ status: "مكتمل" })
+        .where(eq(supplierQuotationsTable.sourceQuotationId, id));
     }
 
     res.json({ success: true });
