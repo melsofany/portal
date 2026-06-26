@@ -196,94 +196,81 @@ router.get("/:id", async (req, res) => {
 });
 
 // POST /api/supplier-quotations
-// Accepts itemSupplierAssignments: { item: {...}, supplierIds: number[] }[]
-// Creates one RFQ per unique supplier, each containing only their assigned items.
+// Creates ONE RFQ containing all selected items, with all selected suppliers
+// (each supplier gets a unique response token).
 router.post("/", async (req, res) => {
   try {
-    const { sourceQuotationId, sourceQuotationNo, customerOrderNo, requestDate, notes, itemSupplierAssignments } = req.body;
+    const { sourceQuotationId, sourceQuotationNo, customerOrderNo, requestDate, notes, items, supplierIds } = req.body;
 
     if (!requestDate) return res.status(400).json({ error: "تاريخ الطلب مطلوب" });
-    if (!Array.isArray(itemSupplierAssignments) || itemSupplierAssignments.length === 0)
+    if (!Array.isArray(items) || items.length === 0)
       return res.status(400).json({ error: "يجب إضافة بند واحد على الأقل" });
-
-    // Build supplierItem map: supplierId → items[]
-    const supplierItemMap: Map<number, any[]> = new Map();
-    for (const { item, supplierIds } of itemSupplierAssignments as any[]) {
-      if (!Array.isArray(supplierIds) || supplierIds.length === 0) continue;
-      for (const sid of supplierIds) {
-        const id = Number(sid);
-        if (!supplierItemMap.has(id)) supplierItemMap.set(id, []);
-        supplierItemMap.get(id)!.push(item);
-      }
-    }
-
-    if (supplierItemMap.size === 0)
+    if (!Array.isArray(supplierIds) || supplierIds.length === 0)
       return res.status(400).json({ error: "يجب اختيار مورد واحد على الأقل" });
 
-    const createdRfqs: any[] = [];
+    const rfqNo = generateRfqNo();
 
-    for (const [supplierId, supplierItems] of supplierItemMap) {
-      const rfqNo = generateRfqNo();
+    // Create single RFQ header
+    const [rfq] = await db
+      .insert(supplierQuotationsTable)
+      .values({
+        rfqNo,
+        sourceQuotationId: sourceQuotationId ? Number(sourceQuotationId) : null,
+        sourceQuotationNo: sourceQuotationNo?.trim() ?? "",
+        customerOrderNo: customerOrderNo?.trim() ?? "",
+        requestDate: requestDate.trim(),
+        notes: notes?.trim() ?? "",
+        status: "مرسل",
+      })
+      .returning();
 
-      const [rfq] = await db
-        .insert(supplierQuotationsTable)
-        .values({
-          rfqNo,
-          sourceQuotationId: sourceQuotationId ? Number(sourceQuotationId) : null,
-          sourceQuotationNo: sourceQuotationNo?.trim() ?? "",
-          customerOrderNo: customerOrderNo?.trim() ?? "",
-          requestDate: requestDate.trim(),
-          notes: notes?.trim() ?? "",
-          status: "مرسل",
-        })
-        .returning();
+    // Insert all items into this single RFQ
+    const itemRows = (items as any[]).map((item: any, idx: number) => ({
+      rfqId: rfq.id,
+      customerItemCode: item.customerItemCode?.trim() ?? "",
+      description: item.description?.trim() ?? "",
+      partNo: item.partNo?.trim() ?? "",
+      unit: item.unit?.trim() ?? "",
+      quantity: String(item.quantity ?? 0),
+      sortOrder: idx,
+    }));
+    await db.insert(supplierQuotationItemsTable).values(itemRows);
 
-      const itemRows = (supplierItems as any[]).map((item: any, idx: number) => ({
+    // Insert all suppliers — each gets their own unique token
+    await db.insert(supplierQuotationSuppliersTable).values(
+      (supplierIds as number[]).map(sid => ({
         rfqId: rfq.id,
-        customerItemCode: item.customerItemCode?.trim() ?? "",
-        description: item.description?.trim() ?? "",
-        partNo: item.partNo?.trim() ?? "",
-        unit: item.unit?.trim() ?? "",
-        quantity: String(item.quantity ?? 0),
-        sortOrder: idx,
-      }));
-      await db.insert(supplierQuotationItemsTable).values(itemRows);
-
-      await db.insert(supplierQuotationSuppliersTable).values({
-        rfqId: rfq.id,
-        supplierId,
+        supplierId: Number(sid),
         sentVia: "",
         token: randomUUID(),
-      });
+      }))
+    );
 
-      const savedItems = await db
-        .select()
-        .from(supplierQuotationItemsTable)
-        .where(eq(supplierQuotationItemsTable.rfqId, rfq.id))
-        .orderBy(supplierQuotationItemsTable.sortOrder);
+    const savedItems = await db
+      .select()
+      .from(supplierQuotationItemsTable)
+      .where(eq(supplierQuotationItemsTable.rfqId, rfq.id))
+      .orderBy(supplierQuotationItemsTable.sortOrder);
 
-      const [savedSupplier] = await db
-        .select({
-          rfqId: supplierQuotationSuppliersTable.rfqId,
-          supplierId: supplierQuotationSuppliersTable.supplierId,
-          sentVia: supplierQuotationSuppliersTable.sentVia,
-          sentAt: supplierQuotationSuppliersTable.sentAt,
-          token: supplierQuotationSuppliersTable.token,
-          responseStatus: supplierQuotationSuppliersTable.responseStatus,
-          responseSubmittedAt: supplierQuotationSuppliersTable.responseSubmittedAt,
-          companyName: suppliersTable.companyName,
-          email: suppliersTable.email,
-          whatsapp: suppliersTable.whatsapp,
-          phone: suppliersTable.phone,
-        })
-        .from(supplierQuotationSuppliersTable)
-        .leftJoin(suppliersTable, eq(supplierQuotationSuppliersTable.supplierId, suppliersTable.id))
-        .where(eq(supplierQuotationSuppliersTable.rfqId, rfq.id));
+    const savedSuppliers = await db
+      .select({
+        rfqId: supplierQuotationSuppliersTable.rfqId,
+        supplierId: supplierQuotationSuppliersTable.supplierId,
+        sentVia: supplierQuotationSuppliersTable.sentVia,
+        sentAt: supplierQuotationSuppliersTable.sentAt,
+        token: supplierQuotationSuppliersTable.token,
+        responseStatus: supplierQuotationSuppliersTable.responseStatus,
+        responseSubmittedAt: supplierQuotationSuppliersTable.responseSubmittedAt,
+        companyName: suppliersTable.companyName,
+        email: suppliersTable.email,
+        whatsapp: suppliersTable.whatsapp,
+        phone: suppliersTable.phone,
+      })
+      .from(supplierQuotationSuppliersTable)
+      .leftJoin(suppliersTable, eq(supplierQuotationSuppliersTable.supplierId, suppliersTable.id))
+      .where(eq(supplierQuotationSuppliersTable.rfqId, rfq.id));
 
-      createdRfqs.push({ ...rfq, items: savedItems, supplier: savedSupplier });
-    }
-
-    res.status(201).json(createdRfqs);
+    res.status(201).json({ ...rfq, items: savedItems, suppliers: savedSuppliers });
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "فشل في إنشاء الطلب" });

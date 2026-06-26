@@ -742,10 +742,10 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   const [selectedItemIds, setSelectedItemIds] = useState<Set<number>>(new Set());
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  // per-item supplier assignment: itemId → supplierIds[]
-  const [itemSupplierMap, setItemSupplierMap] = useState<Record<number, number[]>>({});
-  // per-item category filter for Step 3
-  const [itemCatFilters, setItemCatFilters] = useState<Record<number, string>>({});
+  // Global supplier selection for this single RFQ
+  const [selectedSupplierIds, setSelectedSupplierIds] = useState<Set<number>>(new Set());
+  // Category filter for Step 3 supplier grid
+  const [catFilter, setCatFilter] = useState<string>("all");
   const [suppliersLoaded, setSuppliersLoaded] = useState(false);
   const [notes, setNotes] = useState("");
   const [requestDate, setRequestDate] = useState(new Date().toISOString().split("T")[0]);
@@ -800,10 +800,6 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
 
   async function handleSave() {
     const selectedItems = (foundCQ?.items ?? []).filter(i => selectedItemIds.has(i.id));
-    const itemSupplierAssignments = selectedItems.map(item => ({
-      item,
-      supplierIds: itemSupplierMap[item.id] ?? [],
-    }));
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE}/api/supplier-quotations`, {
@@ -813,12 +809,14 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
           sourceQuotationId: foundCQ?.id ?? null,
           sourceQuotationNo: foundCQ?.quotationNo ?? "",
           customerOrderNo: foundCQ?.customerOrderNo ?? "",
-          requestDate, notes, itemSupplierAssignments,
+          requestDate, notes,
+          items: selectedItems,
+          supplierIds: [...selectedSupplierIds],
         }),
       });
       if (!res.ok) { const e = await res.json(); alert(e.error); return; }
-      const rfqs = await res.json();
-      setSavedRfqs(rfqs);
+      const rfq = await res.json();
+      setSavedRfqs([rfq]);
       onSaved();
       setStep(5);
     } catch { alert("حدث خطأ أثناء الحفظ"); }
@@ -827,11 +825,11 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
 
   const selectedItems = (foundCQ?.items ?? []).filter(i => selectedItemIds.has(i.id));
 
-  // Step 3 validation: every selected item must have ≥1 supplier assigned
-  const step3Valid = selectedItems.length > 0 && selectedItems.every(i => (itemSupplierMap[i.id] ?? []).length > 0);
+  // Step 3 validation: at least one supplier selected
+  const step3Valid = selectedSupplierIds.size > 0;
 
-  // Total unique suppliers across all items
-  const totalUniqueSuppliers = new Set(Object.values(itemSupplierMap).flat()).size;
+  // Total unique suppliers selected
+  const totalUniqueSuppliers = selectedSupplierIds.size;
 
   const STEPS = ["استيراد البنود", "اختيار البنود", "اختيار الموردين", "إرسال الطلب"];
 
@@ -986,106 +984,118 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
             </div>
           )}
 
-          {/* ── STEP 3 ── per-item supplier assignment ── */}
+          {/* ── STEP 3 ── global supplier selection ── */}
           {step === 3 && (
             <div className="space-y-4">
-              <p className="text-sm text-slate-600">حدد مورداً أو أكثر لكل بند — يمكن إرسال كل بند لمورد مختلف</p>
-              {selectedItems.map((item) => {
-                const assignedIds: number[] = itemSupplierMap[item.id] ?? [];
-                const catFilter = itemCatFilters[item.id] ?? "all";
+              <p className="text-sm text-slate-600">
+                اختر الموردين الذين سيُرسَل إليهم هذا الطلب — سيصل لكل مورد رابط خاص للرد على <strong>جميع البنود ({selectedItems.length} بند)</strong>
+              </p>
+
+              {/* Category filter + select-all row */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs text-slate-400 shrink-0">التصنيف:</span>
+                <button
+                  onClick={() => setCatFilter("all")}
+                  className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${catFilter === "all" ? "bg-[#0064d9] text-white border-[#0064d9]" : "border-slate-300 text-slate-600 hover:border-blue-400"}`}
+                >الكل</button>
+                {categories.map(cat => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setCatFilter(String(cat.id))}
+                    className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${catFilter === String(cat.id) ? "bg-[#0064d9] text-white border-[#0064d9]" : "border-slate-300 text-slate-600 hover:border-blue-400"}`}
+                  >{cat.name}</button>
+                ))}
+                {(() => {
+                  const filtered = catFilter === "all" ? suppliers : suppliers.filter(s => s.categories.some(c => String(c.id) === catFilter));
+                  const filteredIds = filtered.map(s => s.id);
+                  const allSelected = filteredIds.length > 0 && filteredIds.every(id => selectedSupplierIds.has(id));
+                  return filtered.length > 0 ? (
+                    <button
+                      onClick={() => {
+                        const next = new Set(selectedSupplierIds);
+                        if (allSelected) { filteredIds.forEach(id => next.delete(id)); }
+                        else { filteredIds.forEach(id => next.add(id)); }
+                        setSelectedSupplierIds(next);
+                      }}
+                      className={`mr-auto px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors ${
+                        allSelected
+                          ? "bg-red-50 text-red-600 border-red-300 hover:bg-red-100"
+                          : "bg-green-50 text-green-700 border-green-300 hover:bg-green-100"
+                      }`}
+                    >
+                      {allSelected ? "إلغاء تحديد الكل" : `تحديد الكل (${filtered.length})`}
+                    </button>
+                  ) : null;
+                })()}
+              </div>
+
+              {/* Suppliers grid */}
+              {(() => {
                 const filtered = catFilter === "all" ? suppliers : suppliers.filter(s => s.categories.some(c => String(c.id) === catFilter));
-                const toggle = (sid: number) => {
-                  const cur = new Set(itemSupplierMap[item.id] ?? []);
-                  cur.has(sid) ? cur.delete(sid) : cur.add(sid);
-                  setItemSupplierMap(prev => ({ ...prev, [item.id]: [...cur] }));
-                };
-                // Select / deselect all currently-visible (filtered) suppliers
-                const filteredIds = filtered.map(s => s.id);
-                const allFilteredSelected = filteredIds.length > 0 && filteredIds.every(id => assignedIds.includes(id));
-                const toggleAll = () => {
-                  const cur = new Set(itemSupplierMap[item.id] ?? []);
-                  if (allFilteredSelected) {
-                    filteredIds.forEach(id => cur.delete(id));
-                  } else {
-                    filteredIds.forEach(id => cur.add(id));
-                  }
-                  setItemSupplierMap(prev => ({ ...prev, [item.id]: [...cur] }));
-                };
-                return (
-                  <div key={item.id} className={`rounded-lg border-2 p-4 space-y-3 ${assignedIds.length > 0 ? "border-blue-200 bg-blue-50/30" : "border-slate-200"}`}>
-                    {/* Item header */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="font-semibold text-sm text-slate-800">{item.description}</p>
-                        <p className="text-xs text-slate-500">{item.partNo ? `رقم القطعة: ${item.partNo}` : ""} {item.quantity} {item.unit}</p>
-                      </div>
-                      {assignedIds.length > 0 && (
-                        <span className="shrink-0 text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">{assignedIds.length} مورد</span>
-                      )}
-                    </div>
-                    {/* Category filter + select all */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs text-slate-400 shrink-0">التصنيف:</span>
-                      <button onClick={() => setItemCatFilters(p => ({ ...p, [item.id]: "all" }))} className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${catFilter === "all" ? "bg-[#0064d9] text-white border-[#0064d9]" : "border-slate-300 text-slate-600 hover:border-blue-400"}`}>الكل</button>
-                      {categories.map(cat => (
-                        <button key={cat.id} onClick={() => setItemCatFilters(p => ({ ...p, [item.id]: String(cat.id) }))} className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${catFilter === String(cat.id) ? "bg-[#0064d9] text-white border-[#0064d9]" : "border-slate-300 text-slate-600 hover:border-blue-400"}`}>{cat.name}</button>
-                      ))}
-                      {filtered.length > 0 && (
+                return filtered.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-2">لا يوجد موردون في هذا التصنيف</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+                    {filtered.map(sup => {
+                      const checked = selectedSupplierIds.has(sup.id);
+                      return (
                         <button
-                          onClick={toggleAll}
-                          className={`mr-auto px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors ${
-                            allFilteredSelected
-                              ? "bg-red-50 text-red-600 border-red-300 hover:bg-red-100"
-                              : "bg-green-50 text-green-700 border-green-300 hover:bg-green-100"
-                          }`}
+                          key={sup.id}
+                          onClick={() => {
+                            const next = new Set(selectedSupplierIds);
+                            checked ? next.delete(sup.id) : next.add(sup.id);
+                            setSelectedSupplierIds(next);
+                          }}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm text-right transition-colors ${checked ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-700 border-slate-200 hover:border-blue-300"}`}
                         >
-                          {allFilteredSelected ? "إلغاء تحديد الكل" : `تحديد الكل (${filtered.length})`}
+                          {checked ? <CheckSquare className="h-4 w-4 shrink-0" /> : <Square className="h-4 w-4 shrink-0 text-slate-400" />}
+                          <span className="truncate font-medium">{sup.companyName}</span>
                         </button>
-                      )}
-                    </div>
-                    {/* Suppliers grid */}
-                    {filtered.length === 0 ? (
-                      <p className="text-xs text-slate-400 py-2">لا يوجد موردون في هذا التصنيف</p>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-48 overflow-y-auto">
-                        {filtered.map(sup => {
-                          const checked = assignedIds.includes(sup.id);
-                          return (
-                            <button key={sup.id} onClick={() => toggle(sup.id)}
-                              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm text-right transition-colors ${checked ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-700 border-slate-200 hover:border-blue-300"}`}>
-                              {checked ? <CheckSquare className="h-4 w-4 shrink-0" /> : <Square className="h-4 w-4 shrink-0 text-slate-400" />}
-                              <span className="truncate font-medium">{sup.companyName}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
                 );
-              })}
-              <p className="text-xs text-slate-500">{totalUniqueSuppliers} مورد فريد — سيُنشأ طلب منفصل لكل مورد</p>
+              })()}
+
+              <p className="text-xs text-slate-500">
+                {selectedSupplierIds.size > 0
+                  ? `تم اختيار ${selectedSupplierIds.size} مورد — سيُنشأ طلب تسعير واحد يُرسل لجميعهم`
+                  : "لم يتم اختيار أي مورد بعد"}
+              </p>
             </div>
           )}
 
           {/* ── STEP 4 ── */}
           {step === 4 && (
             <div className="space-y-4">
-              <div className="rounded-lg bg-slate-50 border p-4 space-y-2 text-sm">
+              <div className="rounded-lg bg-slate-50 border p-4 space-y-3 text-sm">
                 <div className="grid grid-cols-2 gap-4">
-                  <div><span className="text-slate-500">البنود المختارة:</span> <span className="font-bold text-blue-700">{selectedItems.length} بند</span></div>
-                  <div><span className="text-slate-500">عدد الطلبات:</span> <span className="font-bold text-blue-700">{totalUniqueSuppliers} طلب (مورد واحد لكل طلب)</span></div>
-                  <div className="col-span-2"><span className="text-slate-500">رقم طلب تسعير العميل:</span> <span className="font-medium">{foundCQ?.quotationNo || "—"}</span></div>
+                  <div><span className="text-slate-500">البنود:</span> <span className="font-bold text-blue-700">{selectedItems.length} بند</span></div>
+                  <div><span className="text-slate-500">الموردون:</span> <span className="font-bold text-blue-700">{totalUniqueSuppliers} مورد</span></div>
+                  <div className="col-span-2"><span className="text-slate-500">طلب تسعير العميل:</span> <span className="font-medium">{foundCQ?.quotationNo || "—"}</span></div>
                 </div>
+                {/* Items */}
                 <div className="border-t pt-2 space-y-1">
-                  {selectedItems.map(item => {
-                    const names = (itemSupplierMap[item.id] ?? []).map(sid => suppliers.find(s => s.id === sid)?.companyName ?? sid);
-                    return (
-                      <div key={item.id} className="flex items-start gap-2 text-xs">
-                        <span className="font-medium text-slate-700 flex-1 truncate">{item.description}</span>
-                        <span className="text-blue-600 shrink-0">{names.join("، ") || "—"}</span>
-                      </div>
-                    );
-                  })}
+                  <p className="text-xs font-semibold text-slate-600 mb-1">البنود</p>
+                  {selectedItems.map(item => (
+                    <div key={item.id} className="flex items-center gap-2 text-xs">
+                      <span className="text-slate-400">•</span>
+                      <span className="text-slate-700 flex-1 truncate">{item.description}</span>
+                      <span className="text-slate-400">{item.quantity} {item.unit}</span>
+                    </div>
+                  ))}
+                </div>
+                {/* Suppliers */}
+                <div className="border-t pt-2 space-y-1">
+                  <p className="text-xs font-semibold text-slate-600 mb-1">الموردون</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[...selectedSupplierIds].map(sid => {
+                      const sup = suppliers.find(s => s.id === sid);
+                      return sup ? (
+                        <span key={sid} className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">{sup.companyName}</span>
+                      ) : null;
+                    })}
+                  </div>
                 </div>
               </div>
               <div className="space-y-1.5">
@@ -1100,24 +1110,22 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
           )}
 
           {/* ── STEP 5: Success ── */}
-          {step === 5 && savedRfqs.length > 0 && (
-            <div className="space-y-4">
-              <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center">
-                <div className="text-2xl mb-2">✅</div>
-                <p className="font-bold text-green-700">تم إنشاء {savedRfqs.length} طلب تسعير بنجاح</p>
-                <p className="text-sm text-green-600 mt-1">طلب منفصل لكل مورد</p>
-              </div>
-              <p className="text-sm font-semibold text-slate-700">إرسال لكل مورد:</p>
-              <div className="space-y-3">
-                {savedRfqs.map((rfq: any) => {
-                  const sup: RfqSupplier = rfq.supplier;
-                  return (
-                    <div key={rfq.id} className="rounded-lg border border-slate-200 p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <p className="font-semibold text-slate-800">{sup?.companyName}</p>
-                        <span className="text-xs font-mono text-slate-400">{rfq.rfqNo}</span>
-                      </div>
-                      <p className="text-xs text-slate-500">{rfq.items?.length} بند</p>
+          {step === 5 && savedRfqs.length > 0 && (() => {
+            const rfq = savedRfqs[0];
+            return (
+              <div className="space-y-4">
+                <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center">
+                  <div className="text-2xl mb-2">✅</div>
+                  <p className="font-bold text-green-700">تم إنشاء طلب التسعير بنجاح</p>
+                  <p className="text-sm text-green-600 mt-1">
+                    <span className="font-mono font-semibold">{rfq.rfqNo}</span> — {rfq.items?.length} بند · {rfq.suppliers?.length} مورد
+                  </p>
+                </div>
+                <p className="text-sm font-semibold text-slate-700">إرسال الرابط لكل مورد:</p>
+                <div className="space-y-3">
+                  {(rfq.suppliers ?? []).map((sup: RfqSupplier) => (
+                    <div key={sup.token} className="rounded-lg border border-slate-200 p-4 space-y-3">
+                      <p className="font-semibold text-slate-800">{sup.companyName}</p>
                       {sup?.token && (
                         <div className="flex items-center gap-2 bg-slate-50 rounded-lg border px-3 py-2 text-xs font-mono text-slate-500 overflow-hidden">
                           <LinkIcon className="h-3 w-3 shrink-0 text-blue-500" />
@@ -1146,11 +1154,11 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                         </Button>
                       </div>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
 
         <div className="border-t bg-slate-50 px-6 py-4 flex items-center justify-between gap-3">
