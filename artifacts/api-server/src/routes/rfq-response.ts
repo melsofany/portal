@@ -78,6 +78,8 @@ router.get("/:token", async (req, res) => {
       vatIncluded: rfqSupplier.vatIncluded ?? "no",
       deliveryDays: rfqSupplier.deliveryDays ?? null,
       responseNotes: rfqSupplier.responseNotes ?? "",
+      paymentTerms: rfqSupplier.paymentTerms ?? "",
+      offerValidityDays: rfqSupplier.offerValidityDays ?? null,
       items,
       prices,
       company,
@@ -92,7 +94,7 @@ router.get("/:token", async (req, res) => {
 router.post("/:token", async (req, res) => {
   try {
     const { token } = req.params;
-    const { prices, vatIncluded, deliveryDays, responseNotes } = req.body;
+    const { prices, vatIncluded, deliveryDays, responseNotes, paymentTerms, offerValidityDays } = req.body;
 
     const [rfqSupplier] = await db
       .select()
@@ -146,6 +148,8 @@ router.post("/:token", async (req, res) => {
         vatIncluded: vatIncluded ?? "no",
         deliveryDays: deliveryDays ? Number(deliveryDays) : null,
         responseNotes: responseNotes?.trim() ?? "",
+        paymentTerms: paymentTerms?.trim() ?? "",
+        offerValidityDays: offerValidityDays ? Number(offerValidityDays) : null,
       })
       .where(eq(supplierQuotationSuppliersTable.id, rfqSupplier.id));
 
