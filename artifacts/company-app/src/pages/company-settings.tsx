@@ -5,7 +5,7 @@ import React, { useState, useRef } from "react";
   import {
     Building2, Save, Upload, X, Mail, MessageCircle,
     FileText, Landmark, Eye, EyeOff, Plus, Trash2, ShieldAlert,
-    Users, Pencil, Check, Lock, UserPlus
+    Users, Pencil, Check, UserPlus
   } from "lucide-react";
   import { API_BASE } from "@/lib/auth-context";
 
@@ -13,9 +13,7 @@ import React, { useState, useRef } from "react";
     try {
       const token = localStorage.getItem("auth_token");
       return token ? { Authorization: `Bearer ${token}` } : {};
-    } catch {
-      return {};
-    }
+    } catch { return {}; }
   }
 
   interface WhatsAppTemplate { name: string; language: string; body: string; }
@@ -34,10 +32,13 @@ import React, { useState, useRef } from "react";
 
   interface AppUser {
     id: number; username: string; email: string | null; fullName: string | null;
-    role: string; employeeId: number | null; permissions: string | null; isActive: boolean;
+    role: string; employeeId: number | null; permissions: string | null;
+    isActive: boolean; photoUrl: string | null;
   }
 
-  interface Employee { id: number; fullName: string; employeeNumber: string; }
+  interface Employee {
+    id: number; fullName: string; employeeNumber: string; email: string | null;
+  }
 
   type Permissions = Record<string, boolean>;
 
@@ -60,18 +61,25 @@ import React, { useState, useRef } from "react";
 
   type Tab = "company" | "sensitive" | "users";
 
+  const emptyUserForm = {
+    email: "", fullName: "", password: "",
+    role: "user", employeeId: "", permissions: {} as Permissions,
+    isActive: true, photoUrl: "",
+  };
+
   export default function CompanySettingsPage() {
     const queryClient = useQueryClient();
     const [saved, setSaved] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<Tab>("company");
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const photoInputRef = useRef<HTMLInputElement>(null);
 
     // ─── Company Settings ───
     const { data, isLoading } = useQuery<CompanySettings>({
       queryKey: ["company-settings"],
       queryFn: async () => {
-        const res = await fetch(`${API_BASE}/api/settings`, { credentials: "include", headers: { ...getAuthHeaders() } });
+        const res = await fetch(`${API_BASE}/api/settings`, { credentials: "include", headers: getAuthHeaders() });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       },
@@ -114,12 +122,18 @@ import React, { useState, useRef } from "react";
       reader.onload = (ev) => set("logoUrl", ev.target?.result as string);
       reader.readAsDataURL(file);
     }
+    function handlePhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+      const file = e.target.files?.[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => setUserForm(p => ({ ...p, photoUrl: ev.target?.result as string }));
+      reader.readAsDataURL(file);
+    }
 
     // ─── Users Management ───
     const { data: usersData, isLoading: usersLoading } = useQuery<AppUser[]>({
       queryKey: ["app-users"],
       queryFn: async () => {
-        const res = await fetch(`${API_BASE}/api/users`, { credentials: "include", headers: { ...getAuthHeaders() } });
+        const res = await fetch(`${API_BASE}/api/users`, { credentials: "include", headers: getAuthHeaders() });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       },
@@ -129,29 +143,31 @@ import React, { useState, useRef } from "react";
     const { data: employeesData } = useQuery<Employee[]>({
       queryKey: ["employees-list-for-users"],
       queryFn: async () => {
-        const res = await fetch(`${API_BASE}/api/employees`, { credentials: "include", headers: { ...getAuthHeaders() } });
+        const res = await fetch(`${API_BASE}/api/employees`, { credentials: "include", headers: getAuthHeaders() });
         if (!res.ok) return [];
-        const data = await res.json();
-        return Array.isArray(data) ? data : (data.data || []);
+        const d = await res.json();
+        return Array.isArray(d) ? d : (d.data || []);
       },
       enabled: activeTab === "users",
     });
 
     const [userModal, setUserModal] = useState<{ open: boolean; editing: AppUser | null }>({ open: false, editing: null });
-    const [userForm, setUserForm] = useState({ username: "", email: "", fullName: "", password: "", role: "user", employeeId: "", permissions: {} as Permissions, isActive: true });
+    const [userForm, setUserForm] = useState(emptyUserForm);
     const [userError, setUserError] = useState<string | null>(null);
 
     function openAddUser() {
-      setUserForm({ username: "", email: "", fullName: "", password: "", role: "user", employeeId: "", permissions: {}, isActive: true });
+      setUserForm({ ...emptyUserForm });
       setUserError(null);
       setUserModal({ open: true, editing: null });
     }
 
     function openEditUser(u: AppUser) {
       setUserForm({
-        username: u.username, email: u.email || "", fullName: u.fullName || "",
-        password: "", role: u.role, employeeId: u.employeeId ? String(u.employeeId) : "",
-        permissions: parsePerms(u.permissions), isActive: u.isActive,
+        email: u.email || "", fullName: u.fullName || "",
+        password: "", role: u.role,
+        employeeId: u.employeeId ? String(u.employeeId) : "",
+        permissions: parsePerms(u.permissions),
+        isActive: u.isActive, photoUrl: u.photoUrl || "",
       });
       setUserError(null);
       setUserModal({ open: true, editing: u });
@@ -161,6 +177,16 @@ import React, { useState, useRef } from "react";
 
     function togglePerm(key: string) {
       setUserForm(prev => ({ ...prev, permissions: { ...prev.permissions, [key]: !prev.permissions[key] } }));
+    }
+
+    function handleEmployeeSelect(empId: string) {
+      const emp = (employeesData || []).find(x => String(x.id) === empId);
+      setUserForm(p => ({
+        ...p,
+        employeeId: empId,
+        fullName: emp ? emp.fullName : "",
+        email: emp?.email || "",
+      }));
     }
 
     const userMutation = useMutation({
@@ -178,18 +204,16 @@ import React, { useState, useRef } from "react";
 
     const deleteUserMutation = useMutation({
       mutationFn: async (id: number) => {
-        const res = await fetch(`${API_BASE}/api/users/${id}`, { method: "DELETE", credentials: "include", headers: { ...getAuthHeaders() } });
+        const res = await fetch(`${API_BASE}/api/users/${id}`, { method: "DELETE", credentials: "include", headers: getAuthHeaders() });
         if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `HTTP ${res.status}`); }
       },
       onSuccess: () => queryClient.invalidateQueries({ queryKey: ["app-users"] }),
     });
 
     function handleUserSave() {
-      if (!userForm.username.trim()) return setUserError("اسم المستخدم مطلوب");
+      if (!userForm.employeeId) return setUserError("يجب اختيار موظف أولاً");
       if (!userModal.editing && !userForm.password.trim()) return setUserError("كلمة المرور مطلوبة");
-      if (!userForm.employeeId) return setUserError("يجب اختيار موظف — لا يمكن إضافة مستخدم بدون ربطه بموظف");
-      const payload = { ...userForm, id: userModal.editing?.id };
-      userMutation.mutate(payload);
+      userMutation.mutate({ ...userForm, id: userModal.editing?.id });
     }
 
     if (isLoading) return <AppLayout><div className="text-center text-slate-400 py-16 text-sm">جاري التحميل...</div></AppLayout>;
@@ -215,9 +239,9 @@ import React, { useState, useRef } from "react";
           {/* Tabs */}
           <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
             {([
-              { id: "company",   label: "بيانات الشركة",      icon: Building2 },
-              { id: "sensitive", label: "الإعدادات الحساسة",  icon: ShieldAlert },
-              { id: "users",     label: "إدارة المستخدمين",    icon: Users },
+              { id: "company",   label: "بيانات الشركة",     icon: Building2 },
+              { id: "sensitive", label: "الإعدادات الحساسة", icon: ShieldAlert },
+              { id: "users",     label: "إدارة المستخدمين",  icon: Users },
             ] as { id: Tab; label: string; icon: React.ElementType }[]).map(t => (
               <button key={t.id} onClick={() => setActiveTab(t.id)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === t.id ? "bg-white text-[#0064d9] shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
@@ -295,10 +319,10 @@ import React, { useState, useRef } from "react";
                 </div>
                 <div className="mt-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-700">قوالب الرسائل (Templates)</span>
+                    <span className="text-sm font-medium text-slate-700">قوالب الرسائل</span>
                     <Button variant="outline" size="sm" onClick={addTemplate}><Plus className="h-3.5 w-3.5 ml-1" /> إضافة قالب</Button>
                   </div>
-                  {templates.length === 0 && <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded-lg">لا توجد قوالب — اضغط "إضافة قالب"</p>}
+                  {templates.length === 0 && <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded-lg">لا توجد قوالب</p>}
                   {templates.map((tpl, i) => (
                     <div key={i} className="rounded-lg border border-slate-200 p-4 space-y-3 bg-slate-50">
                       <div className="flex items-center justify-between">
@@ -310,8 +334,8 @@ import React, { useState, useRef } from "react";
                         <Field label="اللغة" value={tpl.language} onChange={v => updateTemplate(i, "language", v)} placeholder="ar" dir="ltr" />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-slate-700">نص الرسالة (Body)</label>
-                        <textarea value={tpl.body} onChange={e => updateTemplate(i, "body", e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" dir="rtl" placeholder="مثال: مرحباً {{1}}، طلبك {{2}} جاهز." />
+                        <label className="text-sm font-medium text-slate-700">نص الرسالة</label>
+                        <textarea value={tpl.body} onChange={e => updateTemplate(i, "body", e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" dir="rtl" />
                       </div>
                     </div>
                   ))}
@@ -360,7 +384,7 @@ import React, { useState, useRef } from "react";
           {activeTab === "users" && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-500">إدارة مستخدمي النظام وصلاحياتهم</p>
+                <p className="text-sm text-slate-500">كل مستخدم يرتبط بموظف — يسجل الدخول ببريده الإلكتروني</p>
                 <Button className="bg-[#0064d9] hover:bg-[#0854a0]" onClick={openAddUser}>
                   <UserPlus className="h-4 w-4 ml-2" /> إضافة مستخدم
                 </Button>
@@ -373,12 +397,12 @@ import React, { useState, useRef } from "react";
                   <table className="w-full text-sm text-right">
                     <thead className="bg-slate-50 border-b border-slate-200">
                       <tr>
-                        <th className="px-4 py-3 font-medium text-slate-500">الاسم</th>
-                        <th className="px-4 py-3 font-medium text-slate-500">اسم المستخدم</th>
+                        <th className="px-4 py-3 font-medium text-slate-500">المستخدم</th>
+                        <th className="px-4 py-3 font-medium text-slate-500">البريد الإلكتروني</th>
                         <th className="px-4 py-3 font-medium text-slate-500">الدور</th>
                         <th className="px-4 py-3 font-medium text-slate-500">الصلاحيات</th>
                         <th className="px-4 py-3 font-medium text-slate-500">الحالة</th>
-                        <th className="px-4 py-3 font-medium text-slate-500"></th>
+                        <th className="px-4 py-3"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -390,29 +414,36 @@ import React, { useState, useRef } from "react";
                         const permCount = Object.values(perms).filter(Boolean).length;
                         return (
                           <tr key={u.id} className="hover:bg-slate-50">
-                            <td className="px-4 py-3 font-medium text-slate-800">{u.fullName || "—"}</td>
-                            <td className="px-4 py-3 text-slate-600 font-mono text-xs">{u.username}</td>
                             <td className="px-4 py-3">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${u.role === "admin" ? "bg-purple-100 text-purple-700" : "bg-slate-100 text-slate-600"}`}>
+                              <div className="flex items-center gap-3">
+                                {u.photoUrl ? (
+                                  <img src={u.photoUrl} alt="" className="h-9 w-9 rounded-full object-cover border border-slate-200 shrink-0" />
+                                ) : (
+                                  <div className="h-9 w-9 rounded-full bg-[#0064d9]/10 flex items-center justify-center shrink-0">
+                                    <span className="text-[#0064d9] font-bold text-sm">{(u.fullName || u.username)[0]?.toUpperCase()}</span>
+                                  </div>
+                                )}
+                                <span className="font-medium text-slate-800">{u.fullName || u.username}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-slate-500 text-xs font-mono">{u.email || "—"}</td>
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${u.role === "admin" ? "bg-purple-100 text-purple-700" : "bg-slate-100 text-slate-600"}`}>
                                 {u.role === "admin" ? "مدير" : "مستخدم"}
                               </span>
                             </td>
-                            <td className="px-4 py-3">
-                              {u.role === "admin" ? (
-                                <span className="text-xs text-purple-600 font-medium">كل الصلاحيات</span>
-                              ) : (
-                                <span className="text-xs text-slate-500">{permCount} من {ALL_PERMISSIONS.length}</span>
-                              )}
+                            <td className="px-4 py-3 text-xs text-slate-500">
+                              {u.role === "admin" ? <span className="text-purple-600 font-medium">كل الصلاحيات</span> : `${permCount} / ${ALL_PERMISSIONS.length}`}
                             </td>
                             <td className="px-4 py-3">
-                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${u.isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${u.isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>
                                 {u.isActive ? "نشط" : "معطل"}
                               </span>
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2 justify-end">
-                                <button onClick={() => openEditUser(u)} className="text-slate-400 hover:text-[#0064d9] transition-colors"><Pencil className="h-4 w-4" /></button>
-                                <button onClick={() => { if (confirm("هل أنت متأكد من حذف هذا المستخدم؟")) deleteUserMutation.mutate(u.id); }} className="text-slate-400 hover:text-red-500 transition-colors"><Trash2 className="h-4 w-4" /></button>
+                                <button onClick={() => openEditUser(u)} className="text-slate-400 hover:text-[#0064d9]"><Pencil className="h-4 w-4" /></button>
+                                <button onClick={() => { if (confirm("هل أنت متأكد من حذف هذا المستخدم؟")) deleteUserMutation.mutate(u.id); }} className="text-slate-400 hover:text-red-500"><Trash2 className="h-4 w-4" /></button>
                               </div>
                             </td>
                           </tr>
@@ -423,7 +454,7 @@ import React, { useState, useRef } from "react";
                 </div>
               )}
 
-              {/* User Modal */}
+              {/* ── User Modal ── */}
               {userModal.open && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
                   <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
@@ -435,64 +466,92 @@ import React, { useState, useRef } from "react";
                     </div>
 
                     <div className="p-5 space-y-5">
-                      {/* Basic Info */}
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                          <label className="text-sm font-medium text-slate-700">الاسم الكامل</label>
-                          <input value={userForm.fullName} onChange={e => setUserForm(p => ({ ...p, fullName: e.target.value }))}
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none" placeholder="محمد أحمد" />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-sm font-medium text-slate-700">اسم المستخدم *</label>
-                          <input value={userForm.username} onChange={e => setUserForm(p => ({ ...p, username: e.target.value }))}
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none font-mono" placeholder="mohammed" dir="ltr"
-                            disabled={!!userModal.editing} />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-sm font-medium text-slate-700">البريد الإلكتروني</label>
-                          <input type="email" value={userForm.email} onChange={e => setUserForm(p => ({ ...p, email: e.target.value }))}
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none" placeholder="m@company.com" dir="ltr" />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-sm font-medium text-slate-700">{userModal.editing ? "كلمة مرور جديدة (اتركها فارغة إذا لم تغيّر)" : "كلمة المرور *"}</label>
-                          <input type="password" value={userForm.password} onChange={e => setUserForm(p => ({ ...p, password: e.target.value }))}
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none" placeholder="••••••••" dir="ltr" />
+
+                      {/* Photo */}
+                      <div className="flex items-center gap-5">
+                        {userForm.photoUrl ? (
+                          <div className="relative">
+                            <img src={userForm.photoUrl} alt="صورة" className="h-20 w-20 rounded-full object-cover border-2 border-slate-200" />
+                            <button onClick={() => setUserForm(p => ({ ...p, photoUrl: "" }))} className="absolute -top-1 -left-1 h-5 w-5 rounded-full bg-red-500 text-white flex items-center justify-center">
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="h-20 w-20 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center bg-slate-50">
+                            <Users className="h-7 w-7 text-slate-300" />
+                          </div>
+                        )}
+                        <div>
+                          <Button variant="outline" size="sm" type="button" onClick={() => photoInputRef.current?.click()}>
+                            <Upload className="h-4 w-4 ml-1" /> رفع صورة
+                          </Button>
+                          <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoFile} />
+                          <p className="text-xs text-slate-400 mt-1">صورة شخصية — PNG أو JPG</p>
                         </div>
                       </div>
 
-                      {/* Employee linking */}
+                      {/* Employee selection */}
                       <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-slate-700">الموظف <span className="text-red-500">*</span></label>
-                        <div className="flex gap-2">
-                          <select value={userForm.employeeId} onChange={e => setUserForm(p => ({ ...p, employeeId: e.target.value }))}
-                            className="flex-1 rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none">
-                            <option value="">— اختر موظف —</option>
-                            {(employeesData || []).map(emp => (
-                              <option key={emp.id} value={emp.id}>{emp.fullName} ({emp.employeeNumber})</option>
-                            ))}
-                          </select>
+                        <label className="text-sm font-medium text-slate-700">
+                          الموظف <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={userForm.employeeId}
+                          onChange={e => handleEmployeeSelect(e.target.value)}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
+                          disabled={!!userModal.editing}
+                        >
+                          <option value="">— اختر موظف —</option>
+                          {(employeesData || []).map(emp => (
+                            <option key={emp.id} value={emp.id}>
+                              {emp.fullName} ({emp.employeeNumber})
+                            </option>
+                          ))}
+                        </select>
+                        {userModal.editing && <p className="text-xs text-slate-400">لا يمكن تغيير الموظف المرتبط — احذف المستخدم وأعد إنشاءه</p>}
+                      </div>
 
+                      {/* Auto-filled info */}
+                      {(userForm.fullName || userForm.email) && (
+                        <div className="rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 space-y-1.5">
+                          <p className="text-xs font-semibold text-blue-700">بيانات مجلوبة من الموظف</p>
+                          <div className="grid grid-cols-2 gap-3 text-sm text-slate-700">
+                            <div><span className="text-slate-400 text-xs">الاسم: </span>{userForm.fullName}</div>
+                            <div><span className="text-slate-400 text-xs">البريد (للدخول): </span><span className="font-mono text-xs">{userForm.email || "غير مسجل"}</span></div>
+                          </div>
+                          {!userForm.email && (
+                            <p className="text-xs text-amber-600">⚠ هذا الموظف ليس لديه بريد إلكتروني — أضفه في بيانات الموظف أولاً</p>
+                          )}
                         </div>
+                      )}
+
+                      {/* Password */}
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700">
+                          {userModal.editing ? "كلمة مرور جديدة (اتركها فارغة إذا لم تغيّر)" : "كلمة المرور *"}
+                        </label>
+                        <input type="password" value={userForm.password} onChange={e => setUserForm(p => ({ ...p, password: e.target.value }))}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none" placeholder="••••••••" dir="ltr" />
                       </div>
 
                       {/* Role */}
-                      <div className="space-y-1.5">
+                      <div className="space-y-2">
                         <label className="text-sm font-medium text-slate-700">الدور</label>
-                        <div className="flex gap-3">
+                        <div className="flex gap-4">
                           {[{ v: "user", label: "مستخدم عادي" }, { v: "admin", label: "مدير (كل الصلاحيات)" }].map(r => (
                             <label key={r.v} className="flex items-center gap-2 cursor-pointer">
-                              <input type="radio" name="role" value={r.v} checked={userForm.role === r.v} onChange={() => setUserForm(p => ({ ...p, role: r.v }))} className="text-blue-600" />
+                              <input type="radio" name="role" value={r.v} checked={userForm.role === r.v} onChange={() => setUserForm(p => ({ ...p, role: r.v }))} />
                               <span className="text-sm text-slate-700">{r.label}</span>
                             </label>
                           ))}
                         </div>
                       </div>
 
-                      {/* Active */}
+                      {/* Active toggle */}
                       <div className="flex items-center gap-3">
                         <label className="relative inline-flex items-center cursor-pointer">
                           <input type="checkbox" checked={userForm.isActive} onChange={e => setUserForm(p => ({ ...p, isActive: e.target.checked }))} className="sr-only peer" />
-                          <div className="w-10 h-6 bg-slate-200 peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                          <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
                         </label>
                         <span className="text-sm text-slate-700">الحساب نشط</span>
                       </div>
@@ -503,18 +562,16 @@ import React, { useState, useRef } from "react";
                           <div className="flex items-center justify-between">
                             <label className="text-sm font-semibold text-slate-700">الصلاحيات</label>
                             <div className="flex gap-2">
-                              <button onClick={() => setUserForm(p => ({ ...p, permissions: Object.fromEntries(ALL_PERMISSIONS.map(x => [x.key, true])) }))}
-                                className="text-xs text-blue-600 hover:underline">تحديد الكل</button>
+                              <button onClick={() => setUserForm(p => ({ ...p, permissions: Object.fromEntries(ALL_PERMISSIONS.map(x => [x.key, true])) }))} className="text-xs text-blue-600 hover:underline">تحديد الكل</button>
                               <span className="text-slate-300">|</span>
-                              <button onClick={() => setUserForm(p => ({ ...p, permissions: {} }))}
-                                className="text-xs text-slate-500 hover:underline">إلغاء الكل</button>
+                              <button onClick={() => setUserForm(p => ({ ...p, permissions: {} }))} className="text-xs text-slate-500 hover:underline">إلغاء الكل</button>
                             </div>
                           </div>
                           <div className="grid grid-cols-2 gap-2">
                             {ALL_PERMISSIONS.map(p => (
-                              <label key={p.key} className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
-                                <div onClick={() => togglePerm(p.key)}
-                                  className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-colors cursor-pointer ${userForm.permissions[p.key] ? "bg-[#0064d9] border-[#0064d9]" : "border-slate-300 bg-white"}`}>
+                              <label key={p.key} onClick={() => togglePerm(p.key)}
+                                className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
+                                <div className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-colors ${userForm.permissions[p.key] ? "bg-[#0064d9] border-[#0064d9]" : "border-slate-300 bg-white"}`}>
                                   {userForm.permissions[p.key] && <Check className="h-3 w-3 text-white" />}
                                 </div>
                                 <span className="text-sm text-slate-700">{p.label}</span>
@@ -560,7 +617,7 @@ import React, { useState, useRef } from "react";
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-slate-700">{label}</label>
         <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none transition-colors"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
           dir={dir ?? "rtl"} />
       </div>
     );
