@@ -11,6 +11,8 @@ import {
   customersTable,
   suppliersTable,
   companySettingsTable,
+  employeesTable,
+  usersTable,
 } from "@workspace/db/schema";
 import { eq, desc, inArray, or, ilike, and } from "drizzle-orm";
 
@@ -120,6 +122,162 @@ function buildEmailHtml(
 </div>
 </body>
 </html>`;
+}
+
+// ─── PDF Generator ──────────────────────────────────────────────────────────
+let _arabicFontCache: Buffer | null = null;
+async function getArabicFont(): Promise<Buffer | null> {
+  if (_arabicFontCache) return _arabicFontCache;
+  try {
+    // Amiri is a high-quality Arabic calligraphy font (SIL Open Font License)
+    const res = await fetch(
+      "https://github.com/aliftype/amiri/raw/refs/heads/main/fonts/Amiri-Regular.ttf",
+      { signal: AbortSignal.timeout(8000) }
+    );
+    if (res.ok) {
+      _arabicFontCache = Buffer.from(await res.arrayBuffer());
+      return _arabicFontCache;
+    }
+  } catch {}
+  // Fallback: try jsDelivr mirror
+  try {
+    const res2 = await fetch(
+      "https://cdn.jsdelivr.net/gh/aliftype/amiri@main/fonts/Amiri-Regular.ttf",
+      { signal: AbortSignal.timeout(8000) }
+    );
+    if (res2.ok) {
+      _arabicFontCache = Buffer.from(await res2.arrayBuffer());
+      return _arabicFontCache;
+    }
+  } catch {}
+  return null;
+}
+
+async function generateRfqPdf(opts: {
+  rfqNo: string;
+  requestDate: string;
+  companyName: string;
+  supplierName: string;
+  items: { description: string; partNo?: string | null; unit?: string | null; quantity: string }[];
+  senderName: string;
+  senderPhone: string;
+  notes?: string;
+}): Promise<Buffer> {
+  const { rfqNo, requestDate, companyName, supplierName, items, senderName, senderPhone, notes } = opts;
+
+  // Dynamic import so esbuild can resolve at runtime
+  const PDFDocument = (await import("pdfkit" as any)).default as any;
+  const fontBuffer = await getArabicFont();
+
+  return new Promise<Buffer>((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 40, size: "A4", autoFirstPage: true });
+    const chunks: Buffer[] = [];
+    doc.on("data", (c: Buffer) => chunks.push(c));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    const W = doc.page.width;
+    const margin = 40;
+    const contentW = W - margin * 2;
+
+    // Register Arabic font if available
+    if (fontBuffer) {
+      doc.registerFont("Arabic", fontBuffer);
+    }
+    const font = fontBuffer ? "Arabic" : "Helvetica";
+
+    // ── Header bar ──
+    doc.rect(0, 0, W, 75).fill("#0f2240");
+    doc.fillColor("#ffffff").font(font).fontSize(18)
+      .text("طلب تسعير / Request for Quotation", margin, 18, { width: contentW, align: "right" });
+    doc.fillColor("#94a3b8").fontSize(11)
+      .text(companyName, margin, 42, { width: contentW, align: "right" });
+
+    let y = 90;
+
+    // ── RFQ number box ──
+    doc.roundedRect(margin, y, contentW, 44, 6).fill("#f0f7ff").stroke("#bfdbfe");
+    doc.fillColor("#3b82f6").font(font).fontSize(9)
+      .text("رقم طلب التسعير / RFQ No.", margin + 8, y + 6, { width: contentW - 16, align: "right" });
+    doc.fillColor("#1e3a8a").fontSize(16)
+      .text(rfqNo, margin + 8, y + 20, { width: contentW - 16, align: "right" });
+    y += 54;
+
+    // ── Info fields ──
+    const infoFields: [string, string][] = [
+      ["التاريخ / Date", requestDate],
+      ["المورد / To", supplierName],
+      ["مقدم من / From", senderName],
+    ];
+    if (senderPhone) infoFields.push(["هاتف المرسل / Sender Phone", senderPhone]);
+
+    doc.font(font).fontSize(10);
+    for (const [label, value] of infoFields) {
+      doc.fillColor("#64748b").text(label + ":", margin, y, { continued: false, width: contentW, align: "right" });
+      doc.fillColor("#0f172a").text(value, margin, y + 13, { width: contentW, align: "right" });
+      y += 32;
+    }
+    y += 8;
+
+    // ── Section title ──
+    doc.fillColor("#0f2240").fontSize(11).font(font)
+      .text("البنود المطلوب تسعيرها / Items for Quotation", margin, y, { width: contentW, align: "right" });
+    y += 18;
+
+    // ── Table ──
+    const colWidths = { no: 28, desc: contentW - 28 - 90 - 55 - 55, partNo: 90, unit: 55, qty: 55 };
+    const rowH = 22;
+
+    // Table header
+    doc.rect(margin, y, contentW, rowH).fill("#0f2240");
+    doc.fillColor("#ffffff").fontSize(8.5).font(font);
+    let cx = margin;
+    doc.text("#", cx, y + 6, { width: colWidths.no, align: "center" }); cx += colWidths.no;
+    doc.text("الوصف / Description", cx, y + 6, { width: colWidths.desc, align: "right" }); cx += colWidths.desc;
+    doc.text("رقم القطعة\nPart No.", cx, y + 4, { width: colWidths.partNo, align: "center" }); cx += colWidths.partNo;
+    doc.text("الوحدة\nUnit", cx, y + 4, { width: colWidths.unit, align: "center" }); cx += colWidths.unit;
+    doc.text("الكمية\nQty", cx, y + 4, { width: colWidths.qty, align: "center" });
+    y += rowH;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (y > doc.page.height - 80) {
+        doc.addPage();
+        y = 40;
+      }
+      const bg = i % 2 === 0 ? "#ffffff" : "#f8fafc";
+      doc.rect(margin, y, contentW, rowH).fill(bg).stroke("#e2e8f0");
+
+      doc.fillColor("#374151").fontSize(8.5).font(font);
+      cx = margin;
+      doc.text(String(i + 1), cx, y + 6, { width: colWidths.no, align: "center" }); cx += colWidths.no;
+      doc.text(item.description, cx, y + 6, { width: colWidths.desc, align: "right" }); cx += colWidths.desc;
+      doc.text(item.partNo || "—", cx, y + 6, { width: colWidths.partNo, align: "center" }); cx += colWidths.partNo;
+      doc.text(item.unit || "—", cx, y + 6, { width: colWidths.unit, align: "center" }); cx += colWidths.unit;
+      doc.text(String(item.quantity), cx, y + 6, { width: colWidths.qty, align: "center" });
+      y += rowH;
+    }
+
+    y += 16;
+
+    // ── Notes ──
+    if (notes) {
+      if (y > doc.page.height - 80) { doc.addPage(); y = 40; }
+      doc.roundedRect(margin, y, contentW, 36, 4).fill("#fffbea").stroke("#e8d87a");
+      doc.fillColor("#92400e").font(font).fontSize(9)
+        .text("ملاحظات / Notes: " + notes, margin + 8, y + 8, { width: contentW - 16, align: "right" });
+      y += 44;
+    }
+
+    // ── Footer ──
+    if (y > doc.page.height - 50) { doc.addPage(); y = 40; }
+    doc.moveTo(margin, y).lineTo(W - margin, y).stroke("#e2e8f0");
+    y += 8;
+    doc.fillColor("#94a3b8").font(font).fontSize(8.5)
+      .text("يرجى الرد في أقرب وقت ممكن — نشكر حسن تعاونكم", margin, y, { width: contentW, align: "center" });
+
+    doc.end();
+  });
 }
 
 // ─── GET /api/supplier-quotations/search-cq?q=... ───────────────────────────
@@ -446,12 +604,69 @@ router.post("/:id/send-all", async (req, res) => {
     const fromName = settings?.smtpFromName || settings?.name || "نظام المشتريات";
     const fromEmail = settings?.smtpUser || "";
 
+    // ── Get sender info (name + phone) from the authenticated user ──
+    const senderName = req.auth?.fullName || req.auth?.username || "مسؤول المشتريات";
+    let senderPhone = "";
+    if (req.auth?.userId) {
+      try {
+        // Look up user's linked employee to get their phone number
+        const [user] = await db
+          .select({ employeeId: usersTable.employeeId })
+          .from(usersTable)
+          .where(eq(usersTable.id, req.auth.userId))
+          .limit(1);
+        if (user?.employeeId) {
+          const [emp] = await db
+            .select({ phone: employeesTable.phone })
+            .from(employeesTable)
+            .where(eq(employeesTable.id, user.employeeId))
+            .limit(1);
+          senderPhone = emp?.phone ?? "";
+        }
+      } catch {}
+    }
+
+    // ── Generate a single PDF for this RFQ (shared across all suppliers) ──
+    // The PDF contains RFQ details + sender info but NO token or link.
+    let rfqPdfBuffer: Buffer | null = null;
+    try {
+      rfqPdfBuffer = await generateRfqPdf({
+        rfqNo: rfq.rfqNo,
+        requestDate: rfq.requestDate,
+        companyName: fromName,
+        supplierName: "—", // overridden per-supplier below
+        items,
+        senderName,
+        senderPhone,
+        notes: rfq.notes ?? "",
+      });
+    } catch (pdfErr: any) {
+      req.log.warn(pdfErr, "PDF generation failed — continuing without PDF attachment");
+    }
+
     // Process each supplier
     const results = await Promise.all(
       rfqSuppliers.map(async (sup) => {
         const rfqLink = sup.token ? `${appBase}/rfq/${sup.token}` : "";
         const sentChannels: string[] = [];
         const errors: string[] = [];
+
+        // Generate per-supplier PDF (with correct supplier name)
+        let supplierPdfBuffer: Buffer | null = rfqPdfBuffer;
+        try {
+          supplierPdfBuffer = await generateRfqPdf({
+            rfqNo: rfq.rfqNo,
+            requestDate: rfq.requestDate,
+            companyName: fromName,
+            supplierName: sup.companyName ?? "",
+            items,
+            senderName,
+            senderPhone,
+            notes: rfq.notes ?? "",
+          });
+        } catch {
+          // fall back to generic PDF
+        }
 
         // ── WhatsApp ──
         const whatsappRaw = sup.whatsapp || sup.phone || "";
@@ -467,6 +682,7 @@ router.post("/:id/send-all", async (req, res) => {
 
           if (waEnabled) {
             try {
+              // Step 1: Send text message (includes the supplier link for online pricing)
               const waRes = await fetch(
                 `https://graph.facebook.com/v19.0/${waPhoneId}/messages`,
                 {
@@ -487,7 +703,55 @@ router.post("/:id/send-all", async (req, res) => {
                 sentChannels.push("whatsapp");
               } else {
                 const errData = await waRes.json() as any;
-                errors.push(`WhatsApp: ${errData?.error?.message ?? waRes.status}`);
+                errors.push(`WhatsApp text: ${errData?.error?.message ?? waRes.status}`);
+              }
+
+              // Step 2: Upload PDF and send as document (if PDF was generated)
+              if (supplierPdfBuffer && sentChannels.includes("whatsapp")) {
+                try {
+                  const pdfFilename = `RFQ-${rfq.rfqNo}.pdf`;
+                  const formData = new FormData();
+                  formData.append("messaging_product", "whatsapp");
+                  formData.append("type", "application/pdf");
+                  formData.append(
+                    "file",
+                    new Blob([supplierPdfBuffer], { type: "application/pdf" }),
+                    pdfFilename
+                  );
+                  const uploadRes = await fetch(
+                    `https://graph.facebook.com/v19.0/${waPhoneId}/media`,
+                    {
+                      method: "POST",
+                      headers: { Authorization: `Bearer ${waToken}` },
+                      body: formData,
+                    }
+                  );
+                  if (uploadRes.ok) {
+                    const { id: mediaId } = await uploadRes.json() as any;
+                    await fetch(
+                      `https://graph.facebook.com/v19.0/${waPhoneId}/messages`,
+                      {
+                        method: "POST",
+                        headers: {
+                          Authorization: `Bearer ${waToken}`,
+                          "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                          messaging_product: "whatsapp",
+                          to: phone,
+                          type: "document",
+                          document: {
+                            id: mediaId,
+                            filename: pdfFilename,
+                            caption: `طلب تسعير ${rfq.rfqNo} — مرفق ملف PDF بالبنود التفصيلية`,
+                          },
+                        }),
+                      }
+                    );
+                  }
+                } catch (pdfSendErr: any) {
+                  req.log.warn(pdfSendErr, "WhatsApp PDF document send failed");
+                }
               }
             } catch (e: any) {
               errors.push(`WhatsApp: ${e.message}`);
@@ -527,6 +791,17 @@ router.post("/:id/send-all", async (req, res) => {
               subject: `طلب تسعير - ${rfq.rfqNo}`,
               html: htmlBody,
               text: buildWhatsAppText(rfq.rfqNo, rfq.requestDate, sup.companyName ?? "", items, rfqLink),
+              ...(supplierPdfBuffer
+                ? {
+                    attachments: [
+                      {
+                        filename: `RFQ-${rfq.rfqNo}.pdf`,
+                        content: supplierPdfBuffer,
+                        contentType: "application/pdf",
+                      },
+                    ],
+                  }
+                : {}),
             });
             sentChannels.push("email");
           } catch (e: any) {
