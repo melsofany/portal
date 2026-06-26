@@ -35,8 +35,15 @@ interface RfqData {
   deliveryDays: number | null;
   responseNotes: string;
   items: RfqItem[];
-  prices: { rfqItemId: number; unitPrice: string; notes: string }[];
+  prices: { rfqItemId: number; unitPrice: string; notes: string; vatIncluded?: string; deliveryDays?: number | null }[];
   company: CompanySettings;
+}
+
+interface ItemPrice {
+  unitPrice: string;
+  notes: string;
+  vatIncluded: boolean;
+  deliveryDays: string;
 }
 
 function formatQty(qty: string): string {
@@ -50,7 +57,7 @@ export default function RfqResponsePage() {
   const [data, setData] = useState<RfqData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [prices, setPrices] = useState<Record<number, { unitPrice: string; notes: string }>>({});
+  const [prices, setPrices] = useState<Record<number, ItemPrice>>({});
   const [vatIncluded, setVatIncluded] = useState<"yes" | "no">("no");
   const [deliveryDays, setDeliveryDays] = useState("");
   const [responseNotes, setResponseNotes] = useState("");
@@ -64,10 +71,15 @@ export default function RfqResponsePage() {
       .then((r) => (r.ok ? r.json() : r.json().then((e: any) => Promise.reject(e.error))))
       .then((d: RfqData) => {
         setData(d);
-        const initial: Record<number, { unitPrice: string; notes: string }> = {};
+        const initial: Record<number, ItemPrice> = {};
         d.items.forEach((item) => {
           const existing = d.prices.find((p) => p.rfqItemId === item.id);
-          initial[item.id] = { unitPrice: existing?.unitPrice ?? "", notes: existing?.notes ?? "" };
+          initial[item.id] = {
+            unitPrice: existing?.unitPrice ?? "",
+            notes: existing?.notes ?? "",
+            vatIncluded: existing?.vatIncluded === "yes",
+            deliveryDays: existing?.deliveryDays != null ? String(existing.deliveryDays) : "",
+          };
         });
         setPrices(initial);
         setVatIncluded((d.vatIncluded === "yes" ? "yes" : "no"));
@@ -89,6 +101,8 @@ export default function RfqResponsePage() {
         rfqItemId: item.id,
         unitPrice: prices[item.id]?.unitPrice ?? "0",
         notes: prices[item.id]?.notes ?? "",
+        vatIncluded: prices[item.id]?.vatIncluded ? "yes" : "no",
+        deliveryDays: prices[item.id]?.deliveryDays ? Number(prices[item.id]?.deliveryDays) : null,
       }));
       const res = await fetch(`${API_BASE}/api/rfq/${token}`, {
         method: "POST",
@@ -110,7 +124,7 @@ export default function RfqResponsePage() {
     }
   }
 
-  function setPrice(itemId: number, field: "unitPrice" | "notes", value: string) {
+  function setPrice(itemId: number, field: keyof ItemPrice, value: string | boolean) {
     setPrices((prev) => ({ ...prev, [itemId]: { ...prev[itemId], [field]: value } }));
   }
 
@@ -189,7 +203,6 @@ export default function RfqResponsePage() {
           {(co.name || co.address || co.phone || co.email || co.commercialReg || co.taxReg) && (
             <div className="rounded-xl bg-white border border-slate-200 shadow-sm p-4">
               <div className="flex flex-col sm:flex-row gap-4 items-start">
-                {/* Logo */}
                 {co.logoUrl && (
                   <div className="shrink-0">
                     <img src={co.logoUrl} alt="شعار الشركة" className="h-16 w-auto max-w-[140px] object-contain rounded" />
@@ -200,7 +213,6 @@ export default function RfqResponsePage() {
                     <span className="text-white font-bold text-xl">{co.name.charAt(0)}</span>
                   </div>
                 )}
-                {/* Info */}
                 <div className="flex-1 min-w-0">
                   {co.name && <h2 className="text-base font-bold text-slate-800 mb-2">{co.name}</h2>}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-600">
@@ -306,7 +318,12 @@ export default function RfqResponsePage() {
             <div className="rounded-xl bg-white border border-slate-200 shadow-sm overflow-hidden">
               <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-5 py-3">
                 <h2 className="text-sm font-bold text-slate-700">البنود المطلوب تسعيرها</h2>
-                <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{data.items.length} بند</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{data.items.length} بند</span>
+                  {!isFormDisabled && (
+                    <span className="text-xs text-slate-500 hidden sm:block">✓ = يشمل ضريبة القيمة المضافة</span>
+                  )}
+                </div>
               </div>
 
               {/* Desktop table */}
@@ -314,54 +331,88 @@ export default function RfqResponsePage() {
                 <table className="w-full text-sm text-right">
                   <thead>
                     <tr className="bg-slate-100 text-slate-500 text-xs font-semibold border-b border-slate-200">
-                      <th className="px-4 py-2.5 w-8">#</th>
-                      <th className="px-4 py-2.5">الوصف</th>
-                      <th className="px-4 py-2.5 w-28">رقم القطعة</th>
-                      <th className="px-4 py-2.5 w-20">الكمية</th>
-                      <th className="px-4 py-2.5 w-20">الوحدة</th>
-                      <th className="px-4 py-2.5 w-36">سعر الوحدة *</th>
-                      <th className="px-4 py-2.5 w-28">الإجمالي</th>
-                      <th className="px-4 py-2.5 w-36">ملاحظة البند</th>
+                      <th className="px-3 py-2.5 w-8">#</th>
+                      <th className="px-3 py-2.5">الوصف</th>
+                      <th className="px-3 py-2.5 w-24">رقم القطعة</th>
+                      <th className="px-3 py-2.5 w-16">الكمية</th>
+                      <th className="px-3 py-2.5 w-16">الوحدة</th>
+                      <th className="px-3 py-2.5 w-32">سعر الوحدة *</th>
+                      <th className="px-3 py-2.5 w-24">الإجمالي</th>
+                      <th className="px-3 py-2.5 w-28 text-center">
+                        <span className="inline-flex flex-col items-center leading-tight">
+                          <span>يشمل</span>
+                          <span>الضريبة</span>
+                        </span>
+                      </th>
+                      <th className="px-3 py-2.5 w-28">أيام التوريد</th>
+                      <th className="px-3 py-2.5 w-32">ملاحظة البند</th>
                     </tr>
                   </thead>
                   <tbody>
                     {data.items.map((item, idx) => {
                       const total = lineTotal(item.id, item.quantity);
                       const hasPrice = parseFloat(prices[item.id]?.unitPrice ?? "0") > 0;
+                      const itemVat = prices[item.id]?.vatIncluded ?? false;
                       return (
                         <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                          <td className="px-4 py-3 text-slate-400 text-xs">{idx + 1}</td>
-                          <td className="px-4 py-3">
+                          <td className="px-3 py-3 text-slate-400 text-xs">{idx + 1}</td>
+                          <td className="px-3 py-3">
                             <span className="font-medium text-slate-800">{item.description}</span>
                             {item.customerItemCode && (
                               <span className="text-xs text-slate-400 block mt-0.5">{item.customerItemCode}</span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-slate-500 text-xs">{item.partNo || "—"}</td>
-                          <td className="px-4 py-3 font-mono text-slate-700">{formatQty(item.quantity)}</td>
-                          <td className="px-4 py-3 text-slate-500">{item.unit || "—"}</td>
-                          <td className="px-4 py-2.5">
+                          <td className="px-3 py-3 text-slate-500 text-xs">{item.partNo || "—"}</td>
+                          <td className="px-3 py-3 font-mono text-slate-700">{formatQty(item.quantity)}</td>
+                          <td className="px-3 py-3 text-slate-500">{item.unit || "—"}</td>
+                          <td className="px-3 py-2.5">
                             <input
                               type="number" min="0" step="0.001" placeholder="0.000"
                               disabled={isFormDisabled}
                               value={prices[item.id]?.unitPrice ?? ""}
                               onChange={(e) => setPrice(item.id, "unitPrice", e.target.value)}
-                              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-right font-mono focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-[#0064d9]/20 disabled:bg-slate-50 disabled:text-slate-400 transition-colors"
+                              className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-right font-mono focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-[#0064d9]/20 disabled:bg-slate-50 disabled:text-slate-400 transition-colors"
                               dir="ltr"
                             />
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-3 py-3">
                             <span className={`font-mono text-sm ${hasPrice ? "text-[#0064d9] font-semibold" : "text-slate-300"}`}>
                               {hasPrice ? total.toFixed(3) : "—"}
                             </span>
                           </td>
-                          <td className="px-4 py-2.5">
+                          {/* VAT checkbox per item */}
+                          <td className="px-3 py-2.5 text-center">
+                            <label className={`inline-flex items-center justify-center gap-1.5 cursor-pointer select-none ${isFormDisabled ? "cursor-default" : ""}`}>
+                              <div
+                                onClick={() => !isFormDisabled && setPrice(item.id, "vatIncluded", !itemVat)}
+                                className={`h-6 w-6 rounded-md border-2 flex items-center justify-center transition-all ${
+                                  itemVat
+                                    ? "bg-[#0064d9] border-[#0064d9]"
+                                    : "bg-white border-slate-300 hover:border-[#0064d9]"
+                                } ${isFormDisabled ? "opacity-60 cursor-default" : "cursor-pointer"}`}
+                              >
+                                {itemVat && <Check className="h-3.5 w-3.5 text-white" />}
+                              </div>
+                            </label>
+                          </td>
+                          {/* Delivery days per item */}
+                          <td className="px-3 py-2.5">
+                            <input
+                              type="number" min="1" placeholder="أيام"
+                              disabled={isFormDisabled}
+                              value={prices[item.id]?.deliveryDays ?? ""}
+                              onChange={(e) => setPrice(item.id, "deliveryDays", e.target.value)}
+                              className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-center font-mono focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-[#0064d9]/20 disabled:bg-slate-50 disabled:text-slate-400 transition-colors"
+                              dir="ltr"
+                            />
+                          </td>
+                          <td className="px-3 py-2.5">
                             <input
                               type="text" placeholder="ملاحظة..."
                               disabled={isFormDisabled}
                               value={prices[item.id]?.notes ?? ""}
                               onChange={(e) => setPrice(item.id, "notes", e.target.value)}
-                              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-[#0064d9]/20 disabled:bg-slate-50 disabled:text-slate-400 transition-colors"
+                              className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-[#0064d9]/20 disabled:bg-slate-50 disabled:text-slate-400 transition-colors"
                             />
                           </td>
                         </tr>
@@ -370,11 +421,11 @@ export default function RfqResponsePage() {
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-slate-200 bg-slate-50">
-                      <td colSpan={6} className="px-4 py-3 text-right font-bold text-slate-700 text-sm">الإجمالي الكلي</td>
-                      <td className="px-4 py-3 font-bold font-mono text-[#0064d9] text-sm">
+                      <td colSpan={6} className="px-3 py-3 text-right font-bold text-slate-700 text-sm">الإجمالي الكلي</td>
+                      <td className="px-3 py-3 font-bold font-mono text-[#0064d9] text-sm">
                         {grandTotal > 0 ? grandTotal.toFixed(3) : "—"}
                       </td>
-                      <td />
+                      <td colSpan={3} />
                     </tr>
                   </tfoot>
                 </table>
@@ -385,6 +436,7 @@ export default function RfqResponsePage() {
                 {data.items.map((item, idx) => {
                   const total = lineTotal(item.id, item.quantity);
                   const hasPrice = parseFloat(prices[item.id]?.unitPrice ?? "0") > 0;
+                  const itemVat = prices[item.id]?.vatIncluded ?? false;
                   return (
                     <div key={item.id} className="p-4 space-y-3">
                       <div className="flex items-start justify-between gap-2">
@@ -419,6 +471,38 @@ export default function RfqResponsePage() {
                           </div>
                         </div>
                       </div>
+                      {/* VAT + Delivery days per item on mobile */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs font-medium text-slate-500 mb-1.5 block">أيام التوريد</label>
+                          <input
+                            type="number" min="1" placeholder="عدد الأيام"
+                            disabled={isFormDisabled}
+                            value={prices[item.id]?.deliveryDays ?? ""}
+                            onChange={(e) => setPrice(item.id, "deliveryDays", e.target.value)}
+                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-mono focus:border-[#0064d9] focus:outline-none disabled:bg-slate-50 disabled:text-slate-400"
+                            dir="ltr"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-slate-500 mb-1.5 block">يشمل ضريبة القيمة المضافة</label>
+                          <div
+                            onClick={() => !isFormDisabled && setPrice(item.id, "vatIncluded", !itemVat)}
+                            className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-colors ${
+                              isFormDisabled ? "opacity-60 cursor-default" : "cursor-pointer"
+                            } ${itemVat ? "border-[#0064d9] bg-blue-50" : "border-slate-300 bg-white hover:border-slate-400"}`}
+                          >
+                            <div className={`h-5 w-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all ${
+                              itemVat ? "bg-[#0064d9] border-[#0064d9]" : "bg-white border-slate-300"
+                            }`}>
+                              {itemVat && <Check className="h-3 w-3 text-white" />}
+                            </div>
+                            <span className={`text-xs font-medium ${itemVat ? "text-[#0064d9]" : "text-slate-500"}`}>
+                              {itemVat ? "شامل الضريبة" : "غير شامل"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                       <div>
                         <label className="text-xs font-medium text-slate-500 mb-1.5 block">ملاحظة البند</label>
                         <input
@@ -444,11 +528,11 @@ export default function RfqResponsePage() {
             {/* ── Response details card ── */}
             {!isFormDisabled && (
               <div className="rounded-xl bg-white border border-slate-200 shadow-sm p-5 space-y-4">
-                <h3 className="text-sm font-bold text-slate-700 border-b pb-2">تفاصيل العرض</h3>
+                <h3 className="text-sm font-bold text-slate-700 border-b pb-2">تفاصيل العرض العامة</h3>
 
-                {/* VAT */}
+                {/* Global VAT */}
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-slate-600">ضريبة القيمة المضافة (VAT)</label>
+                  <label className="text-sm font-medium text-slate-600">ضريبة القيمة المضافة الإجمالية (VAT)</label>
                   <div className="flex gap-3">
                     <label className={`flex items-center gap-2 cursor-pointer px-4 py-2.5 rounded-lg border text-sm transition-colors ${vatIncluded === "yes" ? "border-[#0064d9] bg-blue-50 text-[#0064d9] font-semibold" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}>
                       <input type="radio" name="vat" value="yes" checked={vatIncluded === "yes"} onChange={() => setVatIncluded("yes")} className="hidden" />
@@ -461,9 +545,9 @@ export default function RfqResponsePage() {
                   </div>
                 </div>
 
-                {/* Delivery days */}
+                {/* Global Delivery days */}
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-slate-600">مدة التوريد (بالأيام)</label>
+                  <label className="text-sm font-medium text-slate-600">مدة التوريد الإجمالية (بالأيام)</label>
                   <input
                     type="number" min="1" placeholder="مثال: 14"
                     value={deliveryDays}
@@ -488,7 +572,7 @@ export default function RfqResponsePage() {
             )}
 
             {/* Submitted details (read-only view) */}
-            {submitted && (vatIncluded || deliveryDays || responseNotes) && (
+            {submitted && (
               <div className="rounded-xl bg-white border border-slate-200 shadow-sm p-5 space-y-2 text-sm">
                 <h3 className="font-bold text-slate-700 border-b pb-2 text-sm">تفاصيل العرض المُرسَل</h3>
                 <div className="grid grid-cols-2 gap-3">
