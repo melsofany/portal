@@ -186,8 +186,26 @@ async function generateRfqPdf(opts: {
     }
     const font = fontBuffer ? "Arabic" : "Helvetica";
 
+    // ── Helper: draw a filled rectangle with an optional border ──
+    // PDFKit: fill() ends the path, so stroke() on same path afterwards draws nothing.
+    // Use save/restore + explicit path duplication via fillAndStroke where both are needed.
+    const drawRect = (x: number, ry: number, w: number, h: number, fillColor: string, strokeColor?: string) => {
+      if (strokeColor) {
+        doc.save().roundedRect(x, ry, w, h, 0).fillAndStroke(fillColor, strokeColor).restore();
+      } else {
+        doc.rect(x, ry, w, h).fill(fillColor);
+      }
+    };
+    const drawRoundedBox = (x: number, ry: number, w: number, h: number, r: number, fillColor: string, strokeColor?: string) => {
+      if (strokeColor) {
+        doc.save().roundedRect(x, ry, w, h, r).fillAndStroke(fillColor, strokeColor).restore();
+      } else {
+        doc.roundedRect(x, ry, w, h, r).fill(fillColor);
+      }
+    };
+
     // ── Header bar ──
-    doc.rect(0, 0, W, 75).fill("#0f2240");
+    drawRect(0, 0, W, 75, "#0f2240");
     doc.fillColor("#ffffff").font(font).fontSize(18)
       .text("طلب تسعير / Request for Quotation", margin, 18, { width: contentW, align: "right" });
     doc.fillColor("#94a3b8").fontSize(11)
@@ -196,7 +214,7 @@ async function generateRfqPdf(opts: {
     let y = 90;
 
     // ── RFQ number box ──
-    doc.roundedRect(margin, y, contentW, 44, 6).fill("#f0f7ff").stroke("#bfdbfe");
+    drawRoundedBox(margin, y, contentW, 44, 6, "#f0f7ff", "#bfdbfe");
     doc.fillColor("#3b82f6").font(font).fontSize(9)
       .text("رقم طلب التسعير / RFQ No.", margin + 8, y + 6, { width: contentW - 16, align: "right" });
     doc.fillColor("#1e3a8a").fontSize(16)
@@ -224,32 +242,36 @@ async function generateRfqPdf(opts: {
       .text("البنود المطلوب تسعيرها / Items for Quotation", margin, y, { width: contentW, align: "right" });
     y += 18;
 
-    // ── Table ──
+    // ── Table helpers ──
     const colWidths = { no: 28, desc: contentW - 28 - 90 - 55 - 55, partNo: 90, unit: 55, qty: 55 };
     const rowH = 22;
 
-    // Table header
-    doc.rect(margin, y, contentW, rowH).fill("#0f2240");
-    doc.fillColor("#ffffff").fontSize(8.5).font(font);
-    let cx = margin;
-    doc.text("#", cx, y + 6, { width: colWidths.no, align: "center" }); cx += colWidths.no;
-    doc.text("الوصف / Description", cx, y + 6, { width: colWidths.desc, align: "right" }); cx += colWidths.desc;
-    doc.text("رقم القطعة\nPart No.", cx, y + 4, { width: colWidths.partNo, align: "center" }); cx += colWidths.partNo;
-    doc.text("الوحدة\nUnit", cx, y + 4, { width: colWidths.unit, align: "center" }); cx += colWidths.unit;
-    doc.text("الكمية\nQty", cx, y + 4, { width: colWidths.qty, align: "center" });
-    y += rowH;
+    const drawTableHeader = (startY: number) => {
+      drawRect(margin, startY, contentW, rowH, "#0f2240");
+      doc.fillColor("#ffffff").fontSize(8.5).font(font);
+      let hx = margin;
+      doc.text("#", hx, startY + 6, { width: colWidths.no, align: "center" }); hx += colWidths.no;
+      doc.text("الوصف / Description", hx, startY + 6, { width: colWidths.desc, align: "right" }); hx += colWidths.desc;
+      doc.text("رقم القطعة / Part No.", hx, startY + 6, { width: colWidths.partNo, align: "center" }); hx += colWidths.partNo;
+      doc.text("الوحدة / Unit", hx, startY + 6, { width: colWidths.unit, align: "center" }); hx += colWidths.unit;
+      doc.text("الكمية / Qty", hx, startY + 6, { width: colWidths.qty, align: "center" });
+      return startY + rowH;
+    };
+
+    y = drawTableHeader(y);
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       if (y > doc.page.height - 80) {
         doc.addPage();
         y = 40;
+        y = drawTableHeader(y); // re-render header on each new page
       }
-      const bg = i % 2 === 0 ? "#ffffff" : "#f8fafc";
-      doc.rect(margin, y, contentW, rowH).fill(bg).stroke("#e2e8f0");
+      const bg = i % 2 === 0 ? "#ffffff" : "#f0f4f8";
+      drawRect(margin, y, contentW, rowH, bg, "#e2e8f0");
 
       doc.fillColor("#374151").fontSize(8.5).font(font);
-      cx = margin;
+      let cx = margin;
       doc.text(String(i + 1), cx, y + 6, { width: colWidths.no, align: "center" }); cx += colWidths.no;
       doc.text(item.description, cx, y + 6, { width: colWidths.desc, align: "right" }); cx += colWidths.desc;
       doc.text(item.partNo || "—", cx, y + 6, { width: colWidths.partNo, align: "center" }); cx += colWidths.partNo;
@@ -263,7 +285,7 @@ async function generateRfqPdf(opts: {
     // ── Notes ──
     if (notes) {
       if (y > doc.page.height - 80) { doc.addPage(); y = 40; }
-      doc.roundedRect(margin, y, contentW, 36, 4).fill("#fffbea").stroke("#e8d87a");
+      drawRoundedBox(margin, y, contentW, 36, 4, "#fffbea", "#e8d87a");
       doc.fillColor("#92400e").font(font).fontSize(9)
         .text("ملاحظات / Notes: " + notes, margin + 8, y + 8, { width: contentW - 16, align: "right" });
       y += 44;
@@ -271,7 +293,7 @@ async function generateRfqPdf(opts: {
 
     // ── Footer ──
     if (y > doc.page.height - 50) { doc.addPage(); y = 40; }
-    doc.moveTo(margin, y).lineTo(W - margin, y).stroke("#e2e8f0");
+    doc.moveTo(margin, y).lineTo(W - margin, y).strokeColor("#e2e8f0").stroke();
     y += 8;
     doc.fillColor("#94a3b8").font(font).fontSize(8.5)
       .text("يرجى الرد في أقرب وقت ممكن — نشكر حسن تعاونكم", margin, y, { width: contentW, align: "center" });
@@ -726,9 +748,12 @@ router.post("/:id/send-all", async (req, res) => {
                       body: formData,
                     }
                   );
-                  if (uploadRes.ok) {
+                  if (!uploadRes.ok) {
+                    const uploadErr = await uploadRes.json() as any;
+                    errors.push(`WhatsApp PDF upload: ${uploadErr?.error?.message ?? uploadRes.status}`);
+                  } else {
                     const { id: mediaId } = await uploadRes.json() as any;
-                    await fetch(
+                    const docRes = await fetch(
                       `https://graph.facebook.com/v19.0/${waPhoneId}/messages`,
                       {
                         method: "POST",
@@ -748,9 +773,14 @@ router.post("/:id/send-all", async (req, res) => {
                         }),
                       }
                     );
+                    if (!docRes.ok) {
+                      const docErr = await docRes.json() as any;
+                      errors.push(`WhatsApp PDF send: ${docErr?.error?.message ?? docRes.status}`);
+                    }
                   }
                 } catch (pdfSendErr: any) {
                   req.log.warn(pdfSendErr, "WhatsApp PDF document send failed");
+                  errors.push(`WhatsApp PDF: ${pdfSendErr.message}`);
                 }
               }
             } catch (e: any) {
