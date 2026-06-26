@@ -37,7 +37,7 @@ import React, { ReactNode, useState, useEffect } from "react";
     { label: "الحسابات", path: "/accounts", icon: Wallet },
     { label: "الماليات", path: "/finance", icon: BarChart3 },
     { label: "التقارير", path: "/reports", icon: BarChart3 },
-    { label: "المستخدمين", path: "/users", icon: UserCog },
+    { label: "الموظفين", path: "/employees", icon: UserCog },
     { label: "الواتساب", path: "/whatsapp", icon: MessageCircle },
     { label: "الإعدادات", path: "/settings", icon: Settings },
   ];
