@@ -4,7 +4,8 @@ import React, { useState, useRef } from "react";
   import { Button } from "@/components/ui/button";
   import {
     Building2, Save, Upload, X, Mail, MessageCircle,
-    FileText, Landmark, Eye, EyeOff, Plus, Trash2, ShieldAlert
+    FileText, Landmark, Eye, EyeOff, Plus, Trash2, ShieldAlert,
+    Users, Pencil, Check, Lock, UserPlus
   } from "lucide-react";
   import { API_BASE } from "@/lib/auth-context";
 
@@ -17,27 +18,47 @@ import React, { useState, useRef } from "react";
     }
   }
 
-  interface WhatsAppTemplate {
-    name: string;
-    language: string;
-    body: string;
-  }
+  interface WhatsAppTemplate { name: string; language: string; body: string; }
 
   interface CompanySettings {
-    id: number;
-    name: string; logoUrl: string; address: string; phone: string;
+    id: number; name: string; logoUrl: string; address: string; phone: string;
     email: string; commercialReg: string; taxReg: string; website: string;
-    smtpHost: string; smtpPort: string; smtpUser: string;
-    smtpPass: string; smtpFromName: string;
-    whatsappAccountId: string; whatsappPhoneNumber: string;
-    whatsappToken: string; whatsappVerifyToken: string; whatsappTemplates: string;
+    smtpHost: string; smtpPort: string; smtpUser: string; smtpPass: string; smtpFromName: string;
+    whatsappAccountId: string; whatsappPhoneNumber: string; whatsappToken: string;
+    whatsappVerifyToken: string; whatsappTemplates: string;
     zatcaVatNumber: string; zatcaEnvironment: string; zatcaApiUrl: string;
     zatcaApiKey: string; zatcaCertificate: string; zatcaPrivateKey: string;
     bankName: string; bankIban: string; bankAccountNumber: string;
     bankSwift: string; bankApiUrl: string; bankApiKey: string; bankApiSecret: string;
   }
 
-  type Tab = "company" | "sensitive";
+  interface AppUser {
+    id: number; username: string; email: string | null; fullName: string | null;
+    role: string; employeeId: number | null; permissions: string | null; isActive: boolean;
+  }
+
+  interface Employee { id: number; name: string; employeeId: string; }
+
+  type Permissions = Record<string, boolean>;
+
+  const ALL_PERMISSIONS: { key: string; label: string }[] = [
+    { key: "dashboard",      label: "لوحة التحكم" },
+    { key: "employees",      label: "الموظفين" },
+    { key: "customers",      label: "العملاء" },
+    { key: "suppliers",      label: "الموردين" },
+    { key: "customerOrders", label: "طلبات العملاء" },
+    { key: "supplierOrders", label: "طلبات الموردين" },
+    { key: "quotations",     label: "عروض الأسعار" },
+    { key: "finance",        label: "الحسابات والفواتير" },
+    { key: "reports",        label: "التقارير" },
+    { key: "settings",       label: "الإعدادات" },
+  ];
+
+  function parsePerms(raw: string | null): Permissions {
+    try { return raw ? JSON.parse(raw) : {}; } catch { return {}; }
+  }
+
+  type Tab = "company" | "sensitive" | "users";
 
   export default function CompanySettingsPage() {
     const queryClient = useQueryClient();
@@ -46,13 +67,11 @@ import React, { useState, useRef } from "react";
     const [activeTab, setActiveTab] = useState<Tab>("company");
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // ─── Company Settings ───
     const { data, isLoading } = useQuery<CompanySettings>({
       queryKey: ["company-settings"],
       queryFn: async () => {
-        const res = await fetch(`${API_BASE}/api/settings`, {
-          credentials: "include",
-          headers: { ...getAuthHeaders() },
-        });
+        const res = await fetch(`${API_BASE}/api/settings`, { credentials: "include", headers: { ...getAuthHeaders() } });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       },
@@ -72,53 +91,23 @@ import React, { useState, useRef } from "react";
     const mutation = useMutation({
       mutationFn: async (payload: Partial<CompanySettings>) => {
         const res = await fetch(`${API_BASE}/api/settings`, {
-          method: "PUT",
-          credentials: "include",
+          method: "PUT", credentials: "include",
           headers: { "Content-Type": "application/json", ...getAuthHeaders() },
           body: JSON.stringify(payload),
         });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || `HTTP ${res.status}`);
-        }
+        if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `HTTP ${res.status}`); }
         return res.json();
       },
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["company-settings"] });
-        setSaved(true);
-        setSaveError(null);
-        setTimeout(() => setSaved(false), 3000);
-      },
-      onError: (err: Error) => {
-        setSaveError(err.message);
-        setTimeout(() => setSaveError(null), 5000);
-      },
+      onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["company-settings"] }); setSaved(true); setSaveError(null); setTimeout(() => setSaved(false), 3000); },
+      onError: (err: Error) => { setSaveError(err.message); setTimeout(() => setSaveError(null), 5000); },
     });
 
-    function set(field: keyof CompanySettings, value: string) {
-      setForm(prev => ({ ...prev, [field]: value }));
-    }
-
-    function handleSave() {
-      mutation.mutate({ ...form, whatsappTemplates: JSON.stringify(templates) });
-    }
-
-    function toggleSecret(key: string) {
-      setShowSecrets(prev => ({ ...prev, [key]: !prev[key] }));
-    }
-
-    function addTemplate() {
-      setTemplates(prev => [...prev, { name: "", language: "ar", body: "" }]);
-    }
-
-    function updateTemplate(i: number, field: keyof WhatsAppTemplate, value: string) {
-      setTemplates(prev => prev.map((t, idx) => idx === i ? { ...t, [field]: value } : t));
-    }
-
-    function removeTemplate(i: number) {
-      setTemplates(prev => prev.filter((_, idx) => idx !== i));
-    }
-
+    function set(field: keyof CompanySettings, value: string) { setForm(prev => ({ ...prev, [field]: value })); }
+    function handleSave() { mutation.mutate({ ...form, whatsappTemplates: JSON.stringify(templates) }); }
+    function toggleSecret(key: string) { setShowSecrets(prev => ({ ...prev, [key]: !prev[key] })); }
+    function addTemplate() { setTemplates(prev => [...prev, { name: "", language: "ar", body: "" }]); }
+    function updateTemplate(i: number, field: keyof WhatsAppTemplate, value: string) { setTemplates(prev => prev.map((t, idx) => idx === i ? { ...t, [field]: value } : t)); }
+    function removeTemplate(i: number) { setTemplates(prev => prev.filter((_, idx) => idx !== i)); }
     function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
       const file = e.target.files?.[0]; if (!file) return;
       const reader = new FileReader();
@@ -126,14 +115,87 @@ import React, { useState, useRef } from "react";
       reader.readAsDataURL(file);
     }
 
+    // ─── Users Management ───
+    const { data: usersData, isLoading: usersLoading } = useQuery<AppUser[]>({
+      queryKey: ["app-users"],
+      queryFn: async () => {
+        const res = await fetch(`${API_BASE}/api/users`, { credentials: "include", headers: { ...getAuthHeaders() } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      },
+      enabled: activeTab === "users",
+    });
+
+    const { data: employeesData } = useQuery<Employee[]>({
+      queryKey: ["employees-list-for-users"],
+      queryFn: async () => {
+        const res = await fetch(`${API_BASE}/api/employees`, { credentials: "include", headers: { ...getAuthHeaders() } });
+        if (!res.ok) return [];
+        const data = await res.json();
+        return Array.isArray(data) ? data : (data.data || []);
+      },
+      enabled: activeTab === "users",
+    });
+
+    const [userModal, setUserModal] = useState<{ open: boolean; editing: AppUser | null }>({ open: false, editing: null });
+    const [userForm, setUserForm] = useState({ username: "", email: "", fullName: "", password: "", role: "user", employeeId: "", permissions: {} as Permissions, isActive: true });
+    const [userError, setUserError] = useState<string | null>(null);
+
+    function openAddUser() {
+      setUserForm({ username: "", email: "", fullName: "", password: "", role: "user", employeeId: "", permissions: {}, isActive: true });
+      setUserError(null);
+      setUserModal({ open: true, editing: null });
+    }
+
+    function openEditUser(u: AppUser) {
+      setUserForm({
+        username: u.username, email: u.email || "", fullName: u.fullName || "",
+        password: "", role: u.role, employeeId: u.employeeId ? String(u.employeeId) : "",
+        permissions: parsePerms(u.permissions), isActive: u.isActive,
+      });
+      setUserError(null);
+      setUserModal({ open: true, editing: u });
+    }
+
+    function closeUserModal() { setUserModal({ open: false, editing: null }); }
+
+    function togglePerm(key: string) {
+      setUserForm(prev => ({ ...prev, permissions: { ...prev.permissions, [key]: !prev.permissions[key] } }));
+    }
+
+    const userMutation = useMutation({
+      mutationFn: async (payload: typeof userForm & { id?: number }) => {
+        const { id, ...body } = payload;
+        const url = id ? `${API_BASE}/api/users/${id}` : `${API_BASE}/api/users`;
+        const method = id ? "PUT" : "POST";
+        const res = await fetch(url, { method, credentials: "include", headers: { "Content-Type": "application/json", ...getAuthHeaders() }, body: JSON.stringify(body) });
+        if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `HTTP ${res.status}`); }
+        return res.json();
+      },
+      onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["app-users"] }); closeUserModal(); },
+      onError: (err: Error) => setUserError(err.message),
+    });
+
+    const deleteUserMutation = useMutation({
+      mutationFn: async (id: number) => {
+        const res = await fetch(`${API_BASE}/api/users/${id}`, { method: "DELETE", credentials: "include", headers: { ...getAuthHeaders() } });
+        if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `HTTP ${res.status}`); }
+      },
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: ["app-users"] }),
+    });
+
+    function handleUserSave() {
+      if (!userForm.username.trim()) return setUserError("اسم المستخدم مطلوب");
+      if (!userModal.editing && !userForm.password.trim()) return setUserError("كلمة المرور مطلوبة");
+      const payload = { ...userForm, id: userModal.editing?.id };
+      userMutation.mutate(payload);
+    }
+
     if (isLoading) return <AppLayout><div className="text-center text-slate-400 py-16 text-sm">جاري التحميل...</div></AppLayout>;
 
     const SaveBtn = () => (
       <div className="flex flex-col items-end gap-1">
-        <Button
-          className={`${saved ? "bg-green-600 hover:bg-green-700" : "bg-[#0064d9] hover:bg-[#0854a0]"}`}
-          onClick={handleSave} disabled={mutation.isPending}
-        >
+        <Button className={`${saved ? "bg-green-600 hover:bg-green-700" : "bg-[#0064d9] hover:bg-[#0854a0]"}`} onClick={handleSave} disabled={mutation.isPending}>
           <Save className="h-4 w-4 ml-2" />
           {mutation.isPending ? "جاري الحفظ..." : saved ? "تم الحفظ ✓" : "حفظ"}
         </Button>
@@ -143,29 +205,22 @@ import React, { useState, useRef } from "react";
 
     return (
       <AppLayout>
-        <div dir="rtl" className="max-w-3xl mx-auto space-y-5">
+        <div dir="rtl" className="max-w-4xl mx-auto space-y-5">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-slate-800">الإعدادات</h1>
-            <SaveBtn />
+            {activeTab !== "users" && <SaveBtn />}
           </div>
 
           {/* Tabs */}
           <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
             {([
-              { id: "company", label: "بيانات الشركة", icon: Building2 },
-              { id: "sensitive", label: "الإعدادات الحساسة", icon: ShieldAlert },
+              { id: "company",   label: "بيانات الشركة",      icon: Building2 },
+              { id: "sensitive", label: "الإعدادات الحساسة",  icon: ShieldAlert },
+              { id: "users",     label: "إدارة المستخدمين",    icon: Users },
             ] as { id: Tab; label: string; icon: React.ElementType }[]).map(t => (
-              <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  activeTab === t.id
-                    ? "bg-white text-[#0064d9] shadow-sm"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                <t.icon className="h-4 w-4" />
-                {t.label}
+              <button key={t.id} onClick={() => setActiveTab(t.id)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === t.id ? "bg-white text-[#0064d9] shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                <t.icon className="h-4 w-4" />{t.label}
               </button>
             ))}
           </div>
@@ -178,19 +233,13 @@ import React, { useState, useRef } from "react";
                   {form.logoUrl ? (
                     <div className="relative">
                       <img src={form.logoUrl} alt="شعار" className="h-20 w-auto max-w-[200px] object-contain rounded-lg border border-slate-200" />
-                      <button onClick={() => set("logoUrl", "")} className="absolute -top-2 -left-2 h-5 w-5 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600">
-                        <X className="h-3 w-3" />
-                      </button>
+                      <button onClick={() => set("logoUrl", "")} className="absolute -top-2 -left-2 h-5 w-5 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600"><X className="h-3 w-3" /></button>
                     </div>
                   ) : (
-                    <div className="h-20 w-20 rounded-xl border-2 border-dashed border-slate-300 flex items-center justify-center">
-                      <Building2 className="h-8 w-8 text-slate-300" />
-                    </div>
+                    <div className="h-20 w-20 rounded-xl border-2 border-dashed border-slate-300 flex items-center justify-center"><Building2 className="h-8 w-8 text-slate-300" /></div>
                   )}
                   <div className="space-y-2">
-                    <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-                      <Upload className="h-4 w-4 ml-1" /> رفع شعار
-                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}><Upload className="h-4 w-4 ml-1" /> رفع شعار</Button>
                     <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoFile} />
                     <p className="text-xs text-slate-400">PNG أو JPG</p>
                     <div className="flex items-center gap-2">
@@ -200,7 +249,6 @@ import React, { useState, useRef } from "react";
                   </div>
                 </div>
               </Section>
-
               <Section title="بيانات الشركة">
                 <div className="grid grid-cols-1 gap-4">
                   <Field label="اسم الشركة *" value={form.name ?? ""} onChange={v => set("name", v)} placeholder="شركة ..." />
@@ -212,7 +260,6 @@ import React, { useState, useRef } from "react";
                   <Field label="الموقع الإلكتروني" value={form.website ?? ""} onChange={v => set("website", v)} dir="ltr" />
                 </div>
               </Section>
-
               <Section title="بيانات التسجيل">
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="السجل التجاري" value={form.commercialReg ?? ""} onChange={v => set("commercialReg", v)} dir="ltr" />
@@ -229,19 +276,15 @@ import React, { useState, useRef } from "react";
                 <ShieldAlert className="h-4 w-4 shrink-0" />
                 هذه البيانات سرية — لا تشاركها مع أي شخص غير موثوق
               </div>
-
               <Section title="البريد الإلكتروني (SMTP)" icon={<Mail className="h-4 w-4 text-[#0064d9]" />}>
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="SMTP Host" value={form.smtpHost ?? ""} onChange={v => set("smtpHost", v)} placeholder="smtp.gmail.com" dir="ltr" />
                   <Field label="SMTP Port" value={form.smtpPort ?? ""} onChange={v => set("smtpPort", v)} placeholder="587" dir="ltr" />
                   <Field label="SMTP User" value={form.smtpUser ?? ""} onChange={v => set("smtpUser", v)} placeholder="user@gmail.com" dir="ltr" />
                   <SecretField label="SMTP Password" fieldKey="smtpPass" value={form.smtpPass ?? ""} onChange={v => set("smtpPass", v)} show={!!showSecrets["smtpPass"]} onToggle={() => toggleSecret("smtpPass")} />
-                  <div className="col-span-2">
-                    <Field label="اسم المُرسِل" value={form.smtpFromName ?? ""} onChange={v => set("smtpFromName", v)} placeholder="اسم شركتك" />
-                  </div>
+                  <div className="col-span-2"><Field label="اسم المُرسِل" value={form.smtpFromName ?? ""} onChange={v => set("smtpFromName", v)} placeholder="اسم شركتك" /></div>
                 </div>
               </Section>
-
               <Section title="واتساب (WhatsApp Business API)" icon={<MessageCircle className="h-4 w-4 text-green-600" />}>
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Account ID" value={form.whatsappAccountId ?? ""} onChange={v => set("whatsappAccountId", v)} dir="ltr" />
@@ -252,13 +295,9 @@ import React, { useState, useRef } from "react";
                 <div className="mt-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-slate-700">قوالب الرسائل (Templates)</span>
-                    <Button variant="outline" size="sm" onClick={addTemplate}>
-                      <Plus className="h-3.5 w-3.5 ml-1" /> إضافة قالب
-                    </Button>
+                    <Button variant="outline" size="sm" onClick={addTemplate}><Plus className="h-3.5 w-3.5 ml-1" /> إضافة قالب</Button>
                   </div>
-                  {templates.length === 0 && (
-                    <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded-lg">لا توجد قوالب — اضغط "إضافة قالب"</p>
-                  )}
+                  {templates.length === 0 && <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded-lg">لا توجد قوالب — اضغط "إضافة قالب"</p>}
                   {templates.map((tpl, i) => (
                     <div key={i} className="rounded-lg border border-slate-200 p-4 space-y-3 bg-slate-50">
                       <div className="flex items-center justify-between">
@@ -271,58 +310,233 @@ import React, { useState, useRef } from "react";
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-sm font-medium text-slate-700">نص الرسالة (Body)</label>
-                        <textarea value={tpl.body} onChange={e => updateTemplate(i, "body", e.target.value)} rows={3} dir="rtl" placeholder="مرحباً {{1}}، تم تأكيد طلبك رقم {{2}} ..." className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0064d9] focus:outline-none resize-none" />
+                        <textarea value={tpl.body} onChange={e => updateTemplate(i, "body", e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" dir="rtl" placeholder="مثال: مرحباً {{1}}، طلبك {{2}} جاهز." />
                       </div>
                     </div>
                   ))}
                 </div>
               </Section>
-
-              <Section title="منظومة الفاتورة الإلكترونية (ZATCA)" icon={<FileText className="h-4 w-4 text-purple-600" />}>
+              <Section title="فاتورة زاتكا (ZATCA)" icon={<FileText className="h-4 w-4 text-[#0064d9]" />}>
                 <div className="grid grid-cols-2 gap-4">
-                  <Field label="الرقم الضريبي (VAT Number)" value={form.zatcaVatNumber ?? ""} onChange={v => set("zatcaVatNumber", v)} dir="ltr" />
+                  <Field label="رقم ضريبي (VAT)" value={form.zatcaVatNumber ?? ""} onChange={v => set("zatcaVatNumber", v)} dir="ltr" />
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-slate-700">البيئة</label>
-                    <select value={form.zatcaEnvironment ?? "sandbox"} onChange={e => set("zatcaEnvironment", e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0064d9] focus:outline-none bg-white">
-                      <option value="sandbox">تجريبية (Sandbox)</option>
-                      <option value="simulation">محاكاة (Simulation)</option>
-                      <option value="production">إنتاج (Production)</option>
+                    <select value={form.zatcaEnvironment ?? ""} onChange={e => set("zatcaEnvironment", e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none" dir="ltr">
+                      <option value="">اختر...</option>
+                      <option value="sandbox">Sandbox</option>
+                      <option value="production">Production</option>
                     </select>
                   </div>
-                  <div className="col-span-2">
-                    <Field label="API URL" value={form.zatcaApiUrl ?? ""} onChange={v => set("zatcaApiUrl", v)} placeholder="https://gw-fatoora.zatca.gov.sa/e-invoicing/developer-portal" dir="ltr" />
-                  </div>
-                  <div className="col-span-2">
-                    <SecretField label="API Key / CSID" fieldKey="zatcaKey" value={form.zatcaApiKey ?? ""} onChange={v => set("zatcaApiKey", v)} show={!!showSecrets["zatcaKey"]} onToggle={() => toggleSecret("zatcaKey")} />
+                  <Field label="API URL" value={form.zatcaApiUrl ?? ""} onChange={v => set("zatcaApiUrl", v)} dir="ltr" />
+                  <SecretField label="API Key" fieldKey="zatcaKey" value={form.zatcaApiKey ?? ""} onChange={v => set("zatcaApiKey", v)} show={!!showSecrets["zatcaKey"]} onToggle={() => toggleSecret("zatcaKey")} />
+                  <div className="col-span-2 space-y-1.5">
+                    <label className="text-sm font-medium text-slate-700">Certificate (PEM)</label>
+                    <textarea value={form.zatcaCertificate ?? ""} onChange={e => set("zatcaCertificate", e.target.value)} rows={4} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-mono focus:border-blue-500 focus:outline-none" dir="ltr" placeholder="-----BEGIN CERTIFICATE-----" />
                   </div>
                   <div className="col-span-2 space-y-1.5">
-                    <label className="text-sm font-medium text-slate-700">الشهادة الرقمية (Certificate)</label>
-                    <textarea value={form.zatcaCertificate ?? ""} onChange={e => set("zatcaCertificate", e.target.value)} rows={3} dir="ltr" placeholder="-----BEGIN CERTIFICATE-----" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-[#0064d9] focus:outline-none resize-none" />
-                  </div>
-                  <div className="col-span-2 space-y-1.5">
-                    <label className="text-sm font-medium text-slate-700">المفتاح الخاص (Private Key)</label>
-                    <textarea value={form.zatcaPrivateKey ?? ""} onChange={e => set("zatcaPrivateKey", e.target.value)} rows={3} dir="ltr" placeholder="-----BEGIN PRIVATE KEY-----" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-[#0064d9] focus:outline-none resize-none" />
+                    <label className="text-sm font-medium text-slate-700">Private Key (PEM)</label>
+                    <textarea value={form.zatcaPrivateKey ?? ""} onChange={e => set("zatcaPrivateKey", e.target.value)} rows={4} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-mono focus:border-blue-500 focus:outline-none" dir="ltr" placeholder="-----BEGIN RSA PRIVATE KEY-----" />
                   </div>
                 </div>
               </Section>
-
-              <Section title="الإنترنت البنكي (Bank Integration)" icon={<Landmark className="h-4 w-4 text-blue-700" />}>
+              <Section title="الحساب البنكي" icon={<Landmark className="h-4 w-4 text-[#0064d9]" />}>
                 <div className="grid grid-cols-2 gap-4">
-                  <Field label="اسم البنك" value={form.bankName ?? ""} onChange={v => set("bankName", v)} placeholder="بنك الراجحي / SNB ..." />
-                  <Field label="IBAN" value={form.bankIban ?? ""} onChange={v => set("bankIban", v)} placeholder="SA..." dir="ltr" />
+                  <Field label="اسم البنك" value={form.bankName ?? ""} onChange={v => set("bankName", v)} />
+                  <Field label="IBAN" value={form.bankIban ?? ""} onChange={v => set("bankIban", v)} dir="ltr" />
                   <Field label="رقم الحساب" value={form.bankAccountNumber ?? ""} onChange={v => set("bankAccountNumber", v)} dir="ltr" />
-                  <Field label="SWIFT / BIC" value={form.bankSwift ?? ""} onChange={v => set("bankSwift", v)} dir="ltr" />
+                  <Field label="SWIFT Code" value={form.bankSwift ?? ""} onChange={v => set("bankSwift", v)} dir="ltr" />
+                  <Field label="Bank API URL" value={form.bankApiUrl ?? ""} onChange={v => set("bankApiUrl", v)} dir="ltr" />
+                  <SecretField label="Bank API Key" fieldKey="bankKey" value={form.bankApiKey ?? ""} onChange={v => set("bankApiKey", v)} show={!!showSecrets["bankKey"]} onToggle={() => toggleSecret("bankKey")} />
                   <div className="col-span-2">
-                    <Field label="API URL" value={form.bankApiUrl ?? ""} onChange={v => set("bankApiUrl", v)} placeholder="https://api.bank.com/..." dir="ltr" />
+                    <SecretField label="Bank API Secret" fieldKey="bankSecret" value={form.bankApiSecret ?? ""} onChange={v => set("bankApiSecret", v)} show={!!showSecrets["bankSecret"]} onToggle={() => toggleSecret("bankSecret")} />
                   </div>
-                  <SecretField label="API Key" fieldKey="bankKey" value={form.bankApiKey ?? ""} onChange={v => set("bankApiKey", v)} show={!!showSecrets["bankKey"]} onToggle={() => toggleSecret("bankKey")} />
-                  <SecretField label="API Secret" fieldKey="bankSecret" value={form.bankApiSecret ?? ""} onChange={v => set("bankApiSecret", v)} show={!!showSecrets["bankSecret"]} onToggle={() => toggleSecret("bankSecret")} />
                 </div>
               </Section>
+            </div>
+          )}
 
-              <div className="flex justify-end pb-4">
-                <SaveBtn />
+          {/* ── إدارة المستخدمين ── */}
+          {activeTab === "users" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-slate-500">إدارة مستخدمي النظام وصلاحياتهم</p>
+                <Button className="bg-[#0064d9] hover:bg-[#0854a0]" onClick={openAddUser}>
+                  <UserPlus className="h-4 w-4 ml-2" /> إضافة مستخدم
+                </Button>
               </div>
+
+              {usersLoading ? (
+                <div className="text-center text-slate-400 py-12 text-sm">جاري التحميل...</div>
+              ) : (
+                <div className="rounded-xl bg-white border border-slate-200 shadow-sm overflow-hidden">
+                  <table className="w-full text-sm text-right">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="px-4 py-3 font-medium text-slate-500">الاسم</th>
+                        <th className="px-4 py-3 font-medium text-slate-500">اسم المستخدم</th>
+                        <th className="px-4 py-3 font-medium text-slate-500">الدور</th>
+                        <th className="px-4 py-3 font-medium text-slate-500">الصلاحيات</th>
+                        <th className="px-4 py-3 font-medium text-slate-500">الحالة</th>
+                        <th className="px-4 py-3 font-medium text-slate-500"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(!usersData || usersData.length === 0) && (
+                        <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">لا يوجد مستخدمون</td></tr>
+                      )}
+                      {usersData?.map(u => {
+                        const perms = parsePerms(u.permissions);
+                        const permCount = Object.values(perms).filter(Boolean).length;
+                        return (
+                          <tr key={u.id} className="hover:bg-slate-50">
+                            <td className="px-4 py-3 font-medium text-slate-800">{u.fullName || "—"}</td>
+                            <td className="px-4 py-3 text-slate-600 font-mono text-xs">{u.username}</td>
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${u.role === "admin" ? "bg-purple-100 text-purple-700" : "bg-slate-100 text-slate-600"}`}>
+                                {u.role === "admin" ? "مدير" : "مستخدم"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              {u.role === "admin" ? (
+                                <span className="text-xs text-purple-600 font-medium">كل الصلاحيات</span>
+                              ) : (
+                                <span className="text-xs text-slate-500">{permCount} من {ALL_PERMISSIONS.length}</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${u.isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>
+                                {u.isActive ? "نشط" : "معطل"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2 justify-end">
+                                <button onClick={() => openEditUser(u)} className="text-slate-400 hover:text-[#0064d9] transition-colors"><Pencil className="h-4 w-4" /></button>
+                                <button onClick={() => { if (confirm("هل أنت متأكد من حذف هذا المستخدم؟")) deleteUserMutation.mutate(u.id); }} className="text-slate-400 hover:text-red-500 transition-colors"><Trash2 className="h-4 w-4" /></button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* User Modal */}
+              {userModal.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                  <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
+                    <div className="flex items-center justify-between border-b border-slate-200 p-5">
+                      <h3 className="text-lg font-bold text-slate-800">
+                        {userModal.editing ? "تعديل مستخدم" : "إضافة مستخدم جديد"}
+                      </h3>
+                      <button onClick={closeUserModal} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
+                    </div>
+
+                    <div className="p-5 space-y-5">
+                      {/* Basic Info */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium text-slate-700">الاسم الكامل</label>
+                          <input value={userForm.fullName} onChange={e => setUserForm(p => ({ ...p, fullName: e.target.value }))}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none" placeholder="محمد أحمد" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium text-slate-700">اسم المستخدم *</label>
+                          <input value={userForm.username} onChange={e => setUserForm(p => ({ ...p, username: e.target.value }))}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none font-mono" placeholder="mohammed" dir="ltr"
+                            disabled={!!userModal.editing} />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium text-slate-700">البريد الإلكتروني</label>
+                          <input type="email" value={userForm.email} onChange={e => setUserForm(p => ({ ...p, email: e.target.value }))}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none" placeholder="m@company.com" dir="ltr" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium text-slate-700">{userModal.editing ? "كلمة مرور جديدة (اتركها فارغة إذا لم تغيّر)" : "كلمة المرور *"}</label>
+                          <input type="password" value={userForm.password} onChange={e => setUserForm(p => ({ ...p, password: e.target.value }))}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none" placeholder="••••••••" dir="ltr" />
+                        </div>
+                      </div>
+
+                      {/* Employee linking */}
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700">ربط بموظف (اختياري)</label>
+                        <div className="flex gap-2">
+                          <select value={userForm.employeeId} onChange={e => setUserForm(p => ({ ...p, employeeId: e.target.value }))}
+                            className="flex-1 rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none">
+                            <option value="">— اختر موظف —</option>
+                            {(employeesData || []).map(emp => (
+                              <option key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</option>
+                            ))}
+                          </select>
+                          <span className="flex items-center text-sm text-slate-400">أو</span>
+                          <input type="number" value={userForm.employeeId} onChange={e => setUserForm(p => ({ ...p, employeeId: e.target.value }))}
+                            className="w-32 rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none font-mono" placeholder="الرقم الوظيفي" dir="ltr" />
+                        </div>
+                      </div>
+
+                      {/* Role */}
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-700">الدور</label>
+                        <div className="flex gap-3">
+                          {[{ v: "user", label: "مستخدم عادي" }, { v: "admin", label: "مدير (كل الصلاحيات)" }].map(r => (
+                            <label key={r.v} className="flex items-center gap-2 cursor-pointer">
+                              <input type="radio" name="role" value={r.v} checked={userForm.role === r.v} onChange={() => setUserForm(p => ({ ...p, role: r.v }))} className="text-blue-600" />
+                              <span className="text-sm text-slate-700">{r.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Active */}
+                      <div className="flex items-center gap-3">
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input type="checkbox" checked={userForm.isActive} onChange={e => setUserForm(p => ({ ...p, isActive: e.target.checked }))} className="sr-only peer" />
+                          <div className="w-10 h-6 bg-slate-200 peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                        </label>
+                        <span className="text-sm text-slate-700">الحساب نشط</span>
+                      </div>
+
+                      {/* Permissions */}
+                      {userForm.role !== "admin" && (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <label className="text-sm font-semibold text-slate-700">الصلاحيات</label>
+                            <div className="flex gap-2">
+                              <button onClick={() => setUserForm(p => ({ ...p, permissions: Object.fromEntries(ALL_PERMISSIONS.map(x => [x.key, true])) }))}
+                                className="text-xs text-blue-600 hover:underline">تحديد الكل</button>
+                              <span className="text-slate-300">|</span>
+                              <button onClick={() => setUserForm(p => ({ ...p, permissions: {} }))}
+                                className="text-xs text-slate-500 hover:underline">إلغاء الكل</button>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {ALL_PERMISSIONS.map(p => (
+                              <label key={p.key} className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
+                                <div onClick={() => togglePerm(p.key)}
+                                  className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-colors cursor-pointer ${userForm.permissions[p.key] ? "bg-[#0064d9] border-[#0064d9]" : "border-slate-300 bg-white"}`}>
+                                  {userForm.permissions[p.key] && <Check className="h-3 w-3 text-white" />}
+                                </div>
+                                <span className="text-sm text-slate-700">{p.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {userError && <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-2.5 text-sm text-red-700">{userError}</div>}
+                    </div>
+
+                    <div className="flex items-center justify-end gap-3 border-t border-slate-200 p-5">
+                      <Button variant="outline" onClick={closeUserModal}>إلغاء</Button>
+                      <Button className="bg-[#0064d9] hover:bg-[#0854a0]" onClick={handleUserSave} disabled={userMutation.isPending}>
+                        {userMutation.isPending ? "جاري الحفظ..." : userModal.editing ? "حفظ التعديلات" : "إنشاء مستخدم"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -332,33 +546,35 @@ import React, { useState, useRef } from "react";
 
   function Section({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
     return (
-      <div className="rounded-xl bg-white border border-slate-200 shadow-sm p-6 space-y-4">
-        <h2 className="text-base font-bold text-slate-700 flex items-center gap-2">{icon}{title}</h2>
-        {children}
+      <div className="rounded-xl bg-white border border-slate-200 shadow-sm overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-5 py-3">
+          {icon}
+          <h2 className="text-sm font-semibold text-slate-700">{title}</h2>
+        </div>
+        <div className="p-5">{children}</div>
       </div>
     );
   }
 
-  function Field({ label, value, onChange, placeholder, dir }: {
-    label: string; value: string; onChange: (v: string) => void; placeholder?: string; dir?: string;
-  }) {
+  function Field({ label, value, onChange, placeholder, dir }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; dir?: string }) {
     return (
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-slate-700">{label}</label>
-        <input type="text" value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} dir={dir ?? "rtl"} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-blue-200" />
+        <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+          className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none transition-colors"
+          dir={dir ?? "rtl"} />
       </div>
     );
   }
 
-  function SecretField({ label, value, onChange, show, onToggle }: {
-    label: string; fieldKey?: string; value: string; onChange: (v: string) => void; show: boolean; onToggle: () => void;
-  }) {
+  function SecretField({ label, fieldKey, value, onChange, show, onToggle }: { label: string; fieldKey: string; value: string; onChange: (v: string) => void; show: boolean; onToggle: () => void }) {
     return (
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-slate-700">{label}</label>
         <div className="relative">
-          <input type={show ? "text" : "password"} value={value} onChange={e => onChange(e.target.value)} dir="ltr" className="w-full rounded-lg border border-slate-300 px-3 py-2 pr-9 text-sm font-mono focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-blue-200" />
-          <button type="button" onClick={onToggle} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+          <input type={show ? "text" : "password"} value={value} onChange={e => onChange(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none pr-10 font-mono" dir="ltr" />
+          <button type="button" onClick={onToggle} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
             {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
