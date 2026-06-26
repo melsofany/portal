@@ -766,6 +766,9 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   const [copiedToken, setCopiedToken] = useState("");
   const [addingSupplierForRfq, setAddingSupplierForRfq] = useState<Rfq | null>(null);
 
+  // ── Confirmed items (locked when moving from Step 2 → 3) ──
+  const [confirmedItems, setConfirmedItems] = useState<RfqItem[]>([]);
+
   // ── Send-all state ──
   const [sendAllStatus, setSendAllStatus] = useState<"idle" | "sending" | "done" | "error">("idle");
   const [sendAllResults, setSendAllResults] = useState<SendAllResult[]>([]);
@@ -810,12 +813,26 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   }
 
   function goToStep(n: number) {
-    if (n === 3) loadSuppliers();
+    if (n === 3) {
+      // Lock in the selected items explicitly so handleSave never has a stale closure
+      const locked = (foundCQ?.items ?? []).filter(i => selectedItemIds.has(i.id));
+      setConfirmedItems(locked);
+      loadSuppliers();
+    }
     setStep(n);
   }
 
   async function handleSave() {
-    const selectedItems = (foundCQ?.items ?? []).filter(i => selectedItemIds.has(i.id));
+    // Use confirmedItems (set explicitly when moving Step 2→3) to avoid any closure/type issues.
+    // Fall back to recomputing from current state if somehow empty.
+    const itemsToSend = confirmedItems.length > 0
+      ? confirmedItems
+      : (foundCQ?.items ?? []).filter(i => selectedItemIds.has(i.id));
+
+    if (itemsToSend.length === 0) {
+      alert("يجب اختيار بند واحد على الأقل من البنود");
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE}/api/supplier-quotations`, {
@@ -826,7 +843,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
           sourceQuotationNo: foundCQ?.quotationNo ?? "",
           customerOrderNo: foundCQ?.customerOrderNo ?? "",
           requestDate, notes,
-          items: selectedItems,
+          items: itemsToSend,
           supplierIds: [...selectedSupplierIds],
         }),
       });
