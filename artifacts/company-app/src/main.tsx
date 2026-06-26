@@ -12,12 +12,12 @@ async function applyDynamicFavicon() {
       document.title = name + " Portal";
     }
 
-    if (logoUrl && logoUrl.startsWith("http")) {
+    if (logoUrl) {
       const link =
         (document.querySelector("link[rel~='icon']") as HTMLLinkElement) ||
         document.createElement("link");
       link.rel = "icon";
-      link.type = "image/png";
+      link.type = logoUrl.startsWith("data:") ? logoUrl.split(";")[0].replace("data:", "") : "image/png";
       link.href = logoUrl;
       document.head.appendChild(link);
     }
