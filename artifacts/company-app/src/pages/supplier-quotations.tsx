@@ -999,6 +999,18 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                   cur.has(sid) ? cur.delete(sid) : cur.add(sid);
                   setItemSupplierMap(prev => ({ ...prev, [item.id]: [...cur] }));
                 };
+                // Select / deselect all currently-visible (filtered) suppliers
+                const filteredIds = filtered.map(s => s.id);
+                const allFilteredSelected = filteredIds.length > 0 && filteredIds.every(id => assignedIds.includes(id));
+                const toggleAll = () => {
+                  const cur = new Set(itemSupplierMap[item.id] ?? []);
+                  if (allFilteredSelected) {
+                    filteredIds.forEach(id => cur.delete(id));
+                  } else {
+                    filteredIds.forEach(id => cur.add(id));
+                  }
+                  setItemSupplierMap(prev => ({ ...prev, [item.id]: [...cur] }));
+                };
                 return (
                   <div key={item.id} className={`rounded-lg border-2 p-4 space-y-3 ${assignedIds.length > 0 ? "border-blue-200 bg-blue-50/30" : "border-slate-200"}`}>
                     {/* Item header */}
@@ -1011,13 +1023,25 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                         <span className="shrink-0 text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">{assignedIds.length} مورد</span>
                       )}
                     </div>
-                    {/* Category filter */}
+                    {/* Category filter + select all */}
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-xs text-slate-400 shrink-0">التصنيف:</span>
                       <button onClick={() => setItemCatFilters(p => ({ ...p, [item.id]: "all" }))} className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${catFilter === "all" ? "bg-[#0064d9] text-white border-[#0064d9]" : "border-slate-300 text-slate-600 hover:border-blue-400"}`}>الكل</button>
                       {categories.map(cat => (
                         <button key={cat.id} onClick={() => setItemCatFilters(p => ({ ...p, [item.id]: String(cat.id) }))} className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${catFilter === String(cat.id) ? "bg-[#0064d9] text-white border-[#0064d9]" : "border-slate-300 text-slate-600 hover:border-blue-400"}`}>{cat.name}</button>
                       ))}
+                      {filtered.length > 0 && (
+                        <button
+                          onClick={toggleAll}
+                          className={`mr-auto px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors ${
+                            allFilteredSelected
+                              ? "bg-red-50 text-red-600 border-red-300 hover:bg-red-100"
+                              : "bg-green-50 text-green-700 border-green-300 hover:bg-green-100"
+                          }`}
+                        >
+                          {allFilteredSelected ? "إلغاء تحديد الكل" : `تحديد الكل (${filtered.length})`}
+                        </button>
+                      )}
                     </div>
                     {/* Suppliers grid */}
                     {filtered.length === 0 ? (
