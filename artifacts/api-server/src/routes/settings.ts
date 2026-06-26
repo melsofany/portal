@@ -13,6 +13,38 @@ import { Router } from "express";
     return rows[0];
   }
 
+  // Public endpoint — serves the company logo as a favicon image (no auth required)
+  router.get("/favicon", async (_req, res) => {
+    try {
+      const settings = await ensureSettings();
+      const logoUrl = settings.logoUrl ?? "";
+
+      if (!logoUrl) {
+        // No logo set — return a blank 1x1 transparent PNG
+        const blank = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+        res.setHeader("Content-Type", "image/png");
+        res.setHeader("Cache-Control", "public, max-age=60");
+        return res.send(blank);
+      }
+
+      if (logoUrl.startsWith("data:")) {
+        // Base64 data URL — decode and serve
+        const [meta, b64] = logoUrl.split(",");
+        const mimeMatch = meta.match(/data:([^;]+)/);
+        const mime = mimeMatch ? mimeMatch[1] : "image/png";
+        const buf = Buffer.from(b64, "base64");
+        res.setHeader("Content-Type", mime);
+        res.setHeader("Cache-Control", "public, max-age=60");
+        return res.send(buf);
+      }
+
+      // External URL — redirect
+      return res.redirect(302, logoUrl);
+    } catch {
+      res.status(500).end();
+    }
+  });
+
   // Public endpoint — returns only name + logoUrl (no auth required)
     router.get("/public", async (req, res) => {
       try {

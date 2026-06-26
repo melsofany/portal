@@ -41,6 +41,29 @@ import dashboardRouter from "./dashboard";
       }
     });
 
+  // Public endpoint — serves the company logo as a favicon image (no auth required)
+  router.get("/settings/favicon", async (_req, res) => {
+    try {
+      const rows = await db.select({ logoUrl: companySettingsTable.logoUrl }).from(companySettingsTable).limit(1);
+      const logoUrl = rows[0]?.logoUrl ?? "";
+      if (!logoUrl) {
+        const blank = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+        res.setHeader("Content-Type", "image/png");
+        res.setHeader("Cache-Control", "public, max-age=60");
+        return res.send(blank);
+      }
+      if (logoUrl.startsWith("data:")) {
+        const [meta, b64] = logoUrl.split(",");
+        const mimeMatch = meta.match(/data:([^;]+)/);
+        const mime = mimeMatch ? mimeMatch[1] : "image/png";
+        res.setHeader("Content-Type", mime);
+        res.setHeader("Cache-Control", "public, max-age=60");
+        return res.send(Buffer.from(b64, "base64"));
+      }
+      return res.redirect(302, logoUrl);
+    } catch { res.status(500).end(); }
+  });
+
     router.use(requireAuth);
 
   router.use("/suppliers", suppliersRouter);
