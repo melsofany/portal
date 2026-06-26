@@ -562,6 +562,12 @@ import { pool } from "@workspace/db";
             ALTER TABLE supplier_quotation_item_prices ADD COLUMN IF NOT EXISTS delivery_days INTEGER;
           `);
 
+          // Add payment terms and offer validity to supplier quotation suppliers
+          await client.query(`
+            ALTER TABLE supplier_quotation_suppliers ADD COLUMN IF NOT EXISTS payment_terms TEXT DEFAULT '';
+            ALTER TABLE supplier_quotation_suppliers ADD COLUMN IF NOT EXISTS offer_validity_days INTEGER;
+          `);
+
           console.log("[migrate] Schema ready");
     } finally {
       client.release();
