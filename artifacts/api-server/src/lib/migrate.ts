@@ -556,6 +556,12 @@ import { pool } from "@workspace/db";
             ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER NOT NULL DEFAULT 0;
           `);
 
+          // Add per-item VAT and delivery days to supplier quotation item prices
+          await client.query(`
+            ALTER TABLE supplier_quotation_item_prices ADD COLUMN IF NOT EXISTS vat_included TEXT DEFAULT 'no';
+            ALTER TABLE supplier_quotation_item_prices ADD COLUMN IF NOT EXISTS delivery_days INTEGER;
+          `);
+
           console.log("[migrate] Schema ready");
     } finally {
       client.release();
