@@ -11,6 +11,7 @@ import { pgTable, text, serial, integer, boolean, timestamp } from "drizzle-orm/
     employeeId: integer("employee_id"),
     permissions: text("permissions").default("{}"),
     isActive: boolean("is_active").notNull().default(true),
+    photoUrl: text("photo_url").default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
   });
