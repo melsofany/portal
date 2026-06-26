@@ -19,7 +19,7 @@ import { Router, type IRouter } from "express";
   import dashboardRouter from "./dashboard";
   import employeesRouter from "./employees";
   import usersRouter from "./users";
-    import { requireAuth } from "../middlewares/authMiddleware";
+    import { requireAuth, requirePermission, requireAdmin } from "../middlewares/authMiddleware";
       import { db } from "@workspace/db";
       import { companySettingsTable } from "@workspace/db/schema";
 
@@ -68,23 +68,23 @@ import { Router, type IRouter } from "express";
 
       router.use(requireAuth);
 
-    router.use("/suppliers", suppliersRouter);
-    router.use("/suppliers/:id/payment-methods", supplierPaymentMethodsRouter);
-    router.use("/supplier-categories", supplierCategoriesRouter);
-    router.use("/customers", customersRouter);
-    router.use("/customer-quotations", customerQuotationsRouter);
-    router.use("/supplier-quotations", supplierQuotationsRouter);
-    router.use("/whatsapp", whatsappRouter);
-    router.use("/settings", settingsRouter);
-    router.use("/customer-orders", customerOrdersRouter);
-    router.use("/supplier-orders", supplierOrdersRouter);
-    router.use("/accounts", accountsRouter);
-    router.use("/supplier-payments", supplierPaymentsRouter);
-    router.use("/delivery-permits", deliveryPermitsRouter);
-    router.use("/items", itemsRouter);
-    router.use("/dashboard", dashboardRouter);
-    router.use("/employees", employeesRouter);
-    router.use("/users", usersRouter);
+    router.use("/suppliers",              requirePermission("suppliers"),      suppliersRouter);
+    router.use("/suppliers/:id/payment-methods", requirePermission("suppliers"), supplierPaymentMethodsRouter);
+    router.use("/supplier-categories",    requirePermission("suppliers"),      supplierCategoriesRouter);
+    router.use("/customers",              requirePermission("customers"),      customersRouter);
+    router.use("/customer-quotations",    requirePermission("quotations"),     customerQuotationsRouter);
+    router.use("/supplier-quotations",    requirePermission("quotations"),     supplierQuotationsRouter);
+    router.use("/whatsapp",               requireAdmin,                        whatsappRouter);
+    router.use("/settings",               requirePermission("settings"),       settingsRouter);
+    router.use("/customer-orders",        requirePermission("customerOrders"), customerOrdersRouter);
+    router.use("/supplier-orders",        requirePermission("supplierOrders"), supplierOrdersRouter);
+    router.use("/accounts",               requirePermission("finance"),        accountsRouter);
+    router.use("/supplier-payments",      requirePermission("finance"),        supplierPaymentsRouter);
+    router.use("/delivery-permits",       requirePermission("customerOrders"), deliveryPermitsRouter);
+    router.use("/items",                  requirePermission("suppliers"),      itemsRouter);
+    router.use("/dashboard",              requirePermission("dashboard"),      dashboardRouter);
+    router.use("/employees",              requirePermission("employees"),      employeesRouter);
+    router.use("/users",                  requireAdmin,                        usersRouter);
 
     export default router;
   
