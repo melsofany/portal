@@ -72,6 +72,18 @@ interface Category {
   name: string;
 }
 
+interface SendAllResult {
+  supplierId: number;
+  companyName: string;
+  token: string;
+  rfqLink: string;
+  whatsappSent: boolean;
+  emailSent: boolean;
+  whatsappFallbackLink: string | null;
+  sentChannels: string[];
+  errors: string[];
+}
+
 interface AnalysisData {
   items: RfqItem[];
   suppliers: {
@@ -754,6 +766,10 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   const [copiedToken, setCopiedToken] = useState("");
   const [addingSupplierForRfq, setAddingSupplierForRfq] = useState<Rfq | null>(null);
 
+  // ── Send-all state ──
+  const [sendAllStatus, setSendAllStatus] = useState<"idle" | "sending" | "done" | "error">("idle");
+  const [sendAllResults, setSendAllResults] = useState<SendAllResult[]>([]);
+
   async function handleSearch() {
     if (!searchTerm.trim()) return;
     setSearching(true); setSearchError(""); setFoundCQ(null); setSearchResults([]);
@@ -819,8 +835,32 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
       setSavedRfqs([rfq]);
       onSaved();
       setStep(5);
+      // Auto-trigger bulk send immediately after creation
+      triggerSendAll(rfq.id);
     } catch { alert("حدث خطأ أثناء الحفظ"); }
     finally { setSaving(false); }
+  }
+
+  async function triggerSendAll(rfqId: number) {
+    setSendAllStatus("sending");
+    setSendAllResults([]);
+    try {
+      const res = await fetch(`${API_BASE}/api/supplier-quotations/${rfqId}/send-all`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseUrl: window.location.origin }),
+      });
+      const data = await res.json() as any;
+      if (!res.ok) {
+        setSendAllStatus("error");
+        return;
+      }
+      setSendAllResults(data.results ?? []);
+      setSendAllStatus("done");
+    } catch {
+      setSendAllStatus("error");
+    }
   }
 
   const selectedItems = (foundCQ?.items ?? []).filter(i => selectedItemIds.has(i.id));
@@ -1109,11 +1149,21 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
             </div>
           )}
 
-          {/* ── STEP 5: Success ── */}
+          {/* ── STEP 5: Success + Auto-Send ── */}
           {step === 5 && savedRfqs.length > 0 && (() => {
             const rfq = savedRfqs[0];
+            const isSending = sendAllStatus === "sending";
+            const isDone = sendAllStatus === "done";
+            const isError = sendAllStatus === "error";
+
+            // Map results by supplierId for quick lookup
+            const resultMap = new Map<number, SendAllResult>(
+              sendAllResults.map(r => [r.supplierId, r])
+            );
+
             return (
               <div className="space-y-4">
+                {/* Creation success banner */}
                 <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center">
                   <div className="text-2xl mb-2">✅</div>
                   <p className="font-bold text-green-700">تم إنشاء طلب التسعير بنجاح</p>
@@ -1121,40 +1171,133 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                     <span className="font-mono font-semibold">{rfq.rfqNo}</span> — {rfq.items?.length} بند · {rfq.suppliers?.length} مورد
                   </p>
                 </div>
-                <p className="text-sm font-semibold text-slate-700">إرسال الرابط لكل مورد:</p>
-                <div className="space-y-3">
-                  {(rfq.suppliers ?? []).map((sup: RfqSupplier) => (
-                    <div key={sup.token} className="rounded-lg border border-slate-200 p-4 space-y-3">
-                      <p className="font-semibold text-slate-800">{sup.companyName}</p>
-                      {sup?.token && (
-                        <div className="flex items-center gap-2 bg-slate-50 rounded-lg border px-3 py-2 text-xs font-mono text-slate-500 overflow-hidden">
-                          <LinkIcon className="h-3 w-3 shrink-0 text-blue-500" />
-                          <span className="truncate flex-1">{getRfqLink(sup.token)}</span>
-                          <button
-                            onClick={() => copyTokenLink(sup.token, setCopiedToken)}
-                            className="flex items-center gap-1 px-2 py-1 rounded bg-blue-600 text-white shrink-0 hover:bg-blue-700 text-xs font-sans"
-                          >
-                            {copiedToken === sup.token ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                            {copiedToken === sup.token ? "تم" : "نسخ"}
-                          </button>
-                        </div>
-                      )}
-                      <div className="flex flex-wrap gap-2">
-                        <Button size="sm" variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50"
-                          onClick={() => printRfqForSupplier(rfq.rfqNo, rfq.requestDate, rfq.sourceQuotationNo, rfq.customerOrderNo, rfq.notes, sup, rfq.items, sup?.token)}>
-                          <FileText className="h-4 w-4 ml-1" /> طباعة / PDF
-                        </Button>
-                        <Button size="sm" variant="outline" className="border-green-300 text-green-700 hover:bg-green-50"
-                          onClick={() => sendWhatsApp(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup?.token)}>
-                          <MessageSquare className="h-4 w-4 ml-1" /> واتساب
-                        </Button>
-                        <Button size="sm" variant="outline" className="border-orange-300 text-orange-700 hover:bg-orange-50"
-                          onClick={() => openEmail(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup?.token)}>
-                          <Mail className="h-4 w-4 ml-1" /> إيميل
-                        </Button>
-                      </div>
+
+                {/* Send-all status banner */}
+                {isSending && (
+                  <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+                    <Loader2 className="h-5 w-5 animate-spin text-blue-600 shrink-0" />
+                    <div>
+                      <p className="font-semibold text-blue-800 text-sm">جاري الإرسال التلقائي...</p>
+                      <p className="text-xs text-blue-600">يتم إرسال طلبات التسعير عبر واتساب وإيميل لجميع الموردين</p>
                     </div>
-                  ))}
+                  </div>
+                )}
+
+                {isDone && (
+                  <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+                    <Check className="h-5 w-5 text-green-600 shrink-0" />
+                    <div>
+                      <p className="font-semibold text-green-800 text-sm">
+                        تم الإرسال التلقائي إلى {sendAllResults.filter(r => r.sentChannels.length > 0).length} من {sendAllResults.length} مورد
+                      </p>
+                      <p className="text-xs text-green-600">تحقق من تفاصيل كل مورد أدناه</p>
+                    </div>
+                  </div>
+                )}
+
+                {isError && (
+                  <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                    <X className="h-5 w-5 text-red-500 shrink-0" />
+                    <div>
+                      <p className="font-semibold text-red-700 text-sm">حدث خطأ في الإرسال التلقائي</p>
+                      <p className="text-xs text-red-500">يمكنك الإرسال يدوياً من خلال الأزرار أدناه</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Per-supplier cards */}
+                <p className="text-sm font-semibold text-slate-700">تفاصيل الإرسال لكل مورد:</p>
+                <div className="space-y-3">
+                  {(rfq.suppliers ?? []).map((sup: RfqSupplier) => {
+                    const result = resultMap.get(sup.supplierId);
+                    const rfqLinkToUse = result?.rfqLink ?? getRfqLink(sup.token);
+
+                    return (
+                      <div key={sup.token} className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                        {/* Header row */}
+                        <div className="flex items-center justify-between px-4 py-3">
+                          <p className="font-semibold text-slate-800">{sup.companyName}</p>
+                          {/* Sent-via badges */}
+                          <div className="flex gap-1.5">
+                            {isSending && (
+                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
+                                <Loader2 className="h-3 w-3 animate-spin" /> جاري الإرسال...
+                              </span>
+                            )}
+                            {result?.whatsappSent && (
+                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium">
+                                <Check className="h-3 w-3" /> واتساب ✓
+                              </span>
+                            )}
+                            {result?.emailSent && (
+                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
+                                <Check className="h-3 w-3" /> إيميل ✓
+                              </span>
+                            )}
+                            {result && result.sentChannels.length === 0 && !result.whatsappFallbackLink && (
+                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-medium">
+                                <Clock className="h-3 w-3" /> لم يُرسل تلقائياً
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* RFQ link row */}
+                        {sup.token && (
+                          <div className="flex items-center gap-2 border-t bg-slate-50 px-4 py-2">
+                            <LinkIcon className="h-3 w-3 shrink-0 text-blue-500" />
+                            <span className="text-xs text-slate-400 font-mono truncate flex-1">{rfqLinkToUse}</span>
+                            <button
+                              onClick={() => copyTokenLink(sup.token, setCopiedToken)}
+                              className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-200 hover:bg-blue-600 hover:text-white text-xs text-slate-600 shrink-0 transition-colors"
+                            >
+                              {copiedToken === sup.token ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
+                              {copiedToken === sup.token ? "تم" : "نسخ"}
+                            </button>
+                          </div>
+                        )}
+
+                        {/* WhatsApp fallback link (when API not configured) */}
+                        {result?.whatsappFallbackLink && (
+                          <div className="border-t px-4 py-2 bg-green-50 flex items-center gap-2">
+                            <MessageSquare className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                            <span className="text-xs text-green-700">واتساب غير مُهيأ — اضغط لإرسال يدوياً:</span>
+                            <a
+                              href={result.whatsappFallbackLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs font-medium text-green-700 underline"
+                            >
+                              فتح واتساب
+                            </a>
+                          </div>
+                        )}
+
+                        {/* Errors */}
+                        {result?.errors && result.errors.length > 0 && !result.errors.includes("whatsapp_not_configured") && (
+                          <div className="border-t px-4 py-2 bg-red-50">
+                            <p className="text-xs text-red-500">{result.errors.join(" — ")}</p>
+                          </div>
+                        )}
+
+                        {/* Manual action buttons */}
+                        <div className="border-t px-4 py-2.5 flex flex-wrap gap-2">
+                          <Button size="sm" variant="outline" className="border-blue-200 text-blue-600 hover:bg-blue-50 h-7 text-xs px-3"
+                            onClick={() => printRfqForSupplier(rfq.rfqNo, rfq.requestDate, rfq.sourceQuotationNo, rfq.customerOrderNo, rfq.notes, sup, rfq.items, sup?.token)}>
+                            <FileText className="h-3.5 w-3.5 ml-1" /> طباعة
+                          </Button>
+                          <Button size="sm" variant="outline" className="border-green-200 text-green-600 hover:bg-green-50 h-7 text-xs px-3"
+                            onClick={() => sendWhatsApp(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup?.token)}>
+                            <MessageSquare className="h-3.5 w-3.5 ml-1" /> واتساب يدوي
+                          </Button>
+                          <Button size="sm" variant="outline" className="border-orange-200 text-orange-600 hover:bg-orange-50 h-7 text-xs px-3"
+                            onClick={() => openEmail(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup?.token)}>
+                            <Mail className="h-3.5 w-3.5 ml-1" /> إيميل يدوي
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
