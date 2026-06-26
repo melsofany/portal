@@ -1,11 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 
+    export type Permissions = Record<string, boolean>;
+
     export interface AuthUser {
       userId: number;
       username: string;
       fullName: string;
       role: string;
       photoUrl?: string;
+      permissions: Permissions;
     }
 
     interface AuthContextType {
@@ -16,6 +19,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
       login: (email: string, password: string) => Promise<void>;
       logout: () => Promise<void>;
       updateUser: (data: Partial<AuthUser>) => void;
+      hasPermission: (key: string) => boolean;
     }
 
     const AuthContext = createContext<AuthContextType | null>(null);
@@ -28,6 +32,23 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
     }
     function setStoredToken(t: string) { try { localStorage.setItem(TOKEN_KEY, t); } catch {} }
     function clearStoredToken() { try { localStorage.removeItem(TOKEN_KEY); } catch {} }
+
+    function parsePerms(raw: string | null | undefined): Permissions {
+      try { return raw ? JSON.parse(raw) : {}; } catch { return {}; }
+    }
+
+    function buildUser(data: any): AuthUser {
+      return {
+        userId: data.userId,
+        username: data.username,
+        fullName: data.fullName || "",
+        role: data.role,
+        photoUrl: data.photoUrl || "",
+        permissions: typeof data.permissions === "object" && data.permissions !== null
+          ? data.permissions
+          : parsePerms(data.permissions),
+      };
+    }
 
     export function AuthProvider({ children }: { children: React.ReactNode }) {
       const [user, setUser] = useState<AuthUser | null>(null);
@@ -51,13 +72,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
             }
             return r.ok ? r.json() : null;
           })
-          .then((data) => setUser(data ? {
-            userId: data.userId,
-            username: data.username,
-            fullName: data.fullName || "",
-            role: data.role,
-            photoUrl: data.photoUrl || "",
-          } : null))
+          .then((data) => setUser(data ? buildUser(data) : null))
           .catch(() => setUser(null))
           .finally(() => setIsLoading(false));
       }, []);
@@ -76,13 +91,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
         const data = await res.json();
         if (data.token) { setStoredToken(data.token); setToken(data.token); }
         setSessionError(null);
-        setUser({
-          userId: data.userId,
-          username: data.username,
-          fullName: data.fullName || "",
-          role: data.role,
-          photoUrl: data.photoUrl || "",
-        });
+        setUser(buildUser(data));
       }, []);
 
       const logout = useCallback(async () => {
@@ -99,8 +108,15 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
         setUser((prev) => (prev ? { ...prev, ...data } : prev));
       }, []);
 
+      // Admin always has all permissions; non-admin checks the permissions map
+      const hasPermission = useCallback((key: string): boolean => {
+        if (!user) return false;
+        if (user.role === "admin") return true;
+        return !!user.permissions[key];
+      }, [user]);
+
       return (
-        <AuthContext.Provider value={{ user, isLoading, token, sessionError, login, logout, updateUser }}>
+        <AuthContext.Provider value={{ user, isLoading, token, sessionError, login, logout, updateUser, hasPermission }}>
           {children}
         </AuthContext.Provider>
       );
@@ -111,4 +127,3 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
       if (!ctx) throw new Error("useAuth must be used within AuthProvider");
       return ctx;
     }
-    

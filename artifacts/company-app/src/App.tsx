@@ -40,10 +40,38 @@ function Spinner() {
   );
 }
 
-function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  const { user, isLoading } = useAuth();
+function Forbidden() {
+  return (
+    <div dir="rtl" className="flex h-screen flex-col items-center justify-center gap-4 text-slate-500">
+      <div className="text-6xl">🚫</div>
+      <h1 className="text-2xl font-bold text-slate-700">غير مصرح لك</h1>
+      <p className="text-sm">ليس لديك صلاحية الوصول لهذه الصفحة.</p>
+      <a href="/dashboard" className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">
+        العودة للرئيسية
+      </a>
+    </div>
+  );
+}
+
+/**
+ * ProtectedRoute:
+ * - permission: the key to check in user.permissions (admin bypasses all)
+ * - adminOnly: only admin role is allowed regardless of permissions
+ */
+function ProtectedRoute({
+  component: Component,
+  permission,
+  adminOnly,
+}: {
+  component: React.ComponentType;
+  permission?: string;
+  adminOnly?: boolean;
+}) {
+  const { user, isLoading, hasPermission } = useAuth();
   if (isLoading) return <Spinner />;
   if (!user) return <Redirect to="/sign-in" />;
+  if (adminOnly && user.role !== "admin") return <Forbidden />;
+  if (permission && !hasPermission(permission)) return <Forbidden />;
   return <Component />;
 }
 
@@ -58,22 +86,23 @@ function AppRoutes() {
       <Route path="/rfq/:token" component={RfqResponsePage} />
       <Route path="/privacy-policy" component={PrivacyPolicyPage} />
       <Route path="/" component={() => (user ? <Redirect to="/dashboard" /> : <Redirect to="/sign-in" />)} />
-      <Route path="/dashboard" component={() => <ProtectedRoute component={DashboardPage} />} />
-      <Route path="/customers" component={() => <ProtectedRoute component={CustomersPage} />} />
-      <Route path="/suppliers" component={() => <ProtectedRoute component={SuppliersPage} />} />
-      <Route path="/items" component={() => <ProtectedRoute component={ItemsPage} />} />
-      <Route path="/customer-quotations" component={() => <ProtectedRoute component={CustomerQuotationsPage} />} />
-      <Route path="/supplier-quotations" component={() => <ProtectedRoute component={SupplierQuotationsPage} />} />
-      <Route path="/customer-orders" component={() => <ProtectedRoute component={CustomerOrdersPage} />} />
-      <Route path="/supplier-orders" component={() => <ProtectedRoute component={SupplierOrdersPage} />} />
-      <Route path="/delivery-permits" component={() => <ProtectedRoute component={DeliveryPermitsPage} />} />
-      <Route path="/accounts" component={() => <ProtectedRoute component={AccountsPage} />} />
-      <Route path="/finance" component={() => <ProtectedRoute component={FinancePage} />} />
-      <Route path="/reports" component={() => <ProtectedRoute component={ReportsPage} />} />
-      <Route path="/users" component={() => <ProtectedRoute component={UsersPage} />} />
-      <Route path="/employees" component={() => <ProtectedRoute component={EmployeesPage} />} />
-      <Route path="/whatsapp" component={() => <ProtectedRoute component={WhatsAppPage} />} />
-      <Route path="/settings" component={() => <ProtectedRoute component={CompanySettingsPage} />} />
+
+      <Route path="/dashboard"           component={() => <ProtectedRoute component={DashboardPage}            permission="dashboard"      />} />
+      <Route path="/customers"           component={() => <ProtectedRoute component={CustomersPage}            permission="customers"      />} />
+      <Route path="/suppliers"           component={() => <ProtectedRoute component={SuppliersPage}            permission="suppliers"      />} />
+      <Route path="/items"               component={() => <ProtectedRoute component={ItemsPage}                permission="suppliers"      />} />
+      <Route path="/customer-quotations" component={() => <ProtectedRoute component={CustomerQuotationsPage}   permission="quotations"     />} />
+      <Route path="/supplier-quotations" component={() => <ProtectedRoute component={SupplierQuotationsPage}   permission="quotations"     />} />
+      <Route path="/customer-orders"     component={() => <ProtectedRoute component={CustomerOrdersPage}       permission="customerOrders" />} />
+      <Route path="/supplier-orders"     component={() => <ProtectedRoute component={SupplierOrdersPage}       permission="supplierOrders" />} />
+      <Route path="/delivery-permits"    component={() => <ProtectedRoute component={DeliveryPermitsPage}      permission="customerOrders" />} />
+      <Route path="/accounts"            component={() => <ProtectedRoute component={AccountsPage}             permission="finance"        />} />
+      <Route path="/finance"             component={() => <ProtectedRoute component={FinancePage}              permission="finance"        />} />
+      <Route path="/reports"             component={() => <ProtectedRoute component={ReportsPage}              permission="reports"        />} />
+      <Route path="/employees"           component={() => <ProtectedRoute component={EmployeesPage}            permission="employees"      />} />
+      <Route path="/whatsapp"            component={() => <ProtectedRoute component={WhatsAppPage}             adminOnly                   />} />
+      <Route path="/users"               component={() => <ProtectedRoute component={UsersPage}                adminOnly                   />} />
+      <Route path="/settings"            component={() => <ProtectedRoute component={CompanySettingsPage}      permission="settings"       />} />
     </Switch>
   );
 }

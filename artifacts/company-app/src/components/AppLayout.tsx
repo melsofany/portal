@@ -14,22 +14,23 @@ import React, { ReactNode, useState, useRef, useEffect } from "react";
 
     const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
 
-    const navItems = [
-      { label: "لوحة التحكم",         path: "/dashboard",           icon: LayoutDashboard },
-      { label: "العملاء",              path: "/customers",           icon: Users },
-      { label: "الموردين",             path: "/suppliers",           icon: Truck },
-      { label: "البنود",               path: "/items",               icon: List },
-      { label: "طلبات تسعير العملاء", path: "/customer-quotations", icon: FileText },
-      { label: "طلبات تسعير الموردين",path: "/supplier-quotations", icon: FileText },
-      { label: "أوامر شراء العملاء",  path: "/customer-orders",     icon: ShoppingCart },
-      { label: "أوامر شراء الموردين", path: "/supplier-orders",     icon: PackageCheck },
-      { label: "إذون التسليم",         path: "/delivery-permits",    icon: ReceiptText },
-      { label: "الحسابات",             path: "/accounts",            icon: Wallet },
-      { label: "الماليات",             path: "/finance",             icon: BarChart3 },
-      { label: "التقارير",             path: "/reports",             icon: BarChart3 },
-      { label: "الموظفين",             path: "/employees",           icon: UserCog },
-      { label: "الواتساب",             path: "/whatsapp",            icon: MessageCircle },
-      { label: "الإعدادات",            path: "/settings",            icon: Settings },
+    // permission: the key to check; "admin" means admin-role only; undefined means always visible
+    const ALL_NAV_ITEMS = [
+      { label: "لوحة التحكم",         path: "/dashboard",           icon: LayoutDashboard, permission: "dashboard"      },
+      { label: "العملاء",              path: "/customers",           icon: Users,           permission: "customers"      },
+      { label: "الموردين",             path: "/suppliers",           icon: Truck,           permission: "suppliers"      },
+      { label: "البنود",               path: "/items",               icon: List,            permission: "suppliers"      },
+      { label: "طلبات تسعير العملاء", path: "/customer-quotations", icon: FileText,        permission: "quotations"     },
+      { label: "طلبات تسعير الموردين",path: "/supplier-quotations", icon: FileText,        permission: "quotations"     },
+      { label: "أوامر شراء العملاء",  path: "/customer-orders",     icon: ShoppingCart,    permission: "customerOrders" },
+      { label: "أوامر شراء الموردين", path: "/supplier-orders",     icon: PackageCheck,    permission: "supplierOrders" },
+      { label: "إذون التسليم",         path: "/delivery-permits",    icon: ReceiptText,     permission: "customerOrders" },
+      { label: "الحسابات",             path: "/accounts",            icon: Wallet,          permission: "finance"        },
+      { label: "الماليات",             path: "/finance",             icon: BarChart3,       permission: "finance"        },
+      { label: "التقارير",             path: "/reports",             icon: BarChart3,       permission: "reports"        },
+      { label: "الموظفين",             path: "/employees",           icon: UserCog,         permission: "employees"      },
+      { label: "الواتساب",             path: "/whatsapp",            icon: MessageCircle,   permission: "admin"          },
+      { label: "الإعدادات",            path: "/settings",            icon: Settings,        permission: "settings"       },
     ];
 
     interface CompanySettings { id: number; name: string; logoUrl: string; }
@@ -251,10 +252,17 @@ import React, { ReactNode, useState, useRef, useEffect } from "react";
     }
 
     export default function AppLayout({ children }: { children: ReactNode }) {
-      const { user, logout } = useAuth();
+      const { user, logout, hasPermission } = useAuth();
       const [location] = useLocation();
       const [sidebarOpen, setSidebarOpen] = useState(false);
       const [profileOpen, setProfileOpen] = useState(false);
+
+      // Filter nav items: admin sees all, others see only permitted items
+      const navItems = ALL_NAV_ITEMS.filter((item) => {
+        if (item.permission === "admin") return user?.role === "admin";
+        return hasPermission(item.permission);
+      });
+
       const currentPage = navItems.find((item) => location.startsWith(item.path))?.label || "";
 
       const { data: companySettings } = useQuery<CompanySettings>({

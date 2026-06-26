@@ -96,6 +96,7 @@ import { Router } from "express";
             fullName: user.fullName,
             role: user.role,
             photoUrl: user.photoUrl || "",
+            permissions: user.permissions || "{}",
             token: jwtToken,
           });
       } catch (err: any) {
@@ -139,6 +140,7 @@ import { Router } from "express";
             role: usersTable.role,
             photoUrl: usersTable.photoUrl,
             isActive: usersTable.isActive,
+            permissions: usersTable.permissions,
           })
           .from(usersTable)
           .where(eq(usersTable.id, req.auth!.userId))
