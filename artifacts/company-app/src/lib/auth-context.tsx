@@ -5,6 +5,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
     username: string;
     fullName: string;
     role: string;
+    photoUrl?: string;
   }
 
   interface AuthContextType {
@@ -42,16 +43,20 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
         .then(async (r) => {
           if (r.status === 401) {
             const body = await r.json().catch(() => ({}));
-            if (body?.error?.includes("جهاز آخر")) {
-              setSessionError(body.error);
-            }
+            if (body?.error?.includes("جهاز آخر")) setSessionError(body.error);
             clearStoredToken();
             setToken(null);
             return null;
           }
           return r.ok ? r.json() : null;
         })
-        .then((data) => setUser(data))
+        .then((data) => setUser(data ? {
+          userId: data.userId,
+          username: data.username,
+          fullName: data.fullName || "",
+          role: data.role,
+          photoUrl: data.photoUrl || "",
+        } : null))
         .catch(() => setUser(null))
         .finally(() => setIsLoading(false));
     }, []);
@@ -70,14 +75,20 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
       const data = await res.json();
       if (data.token) { setStoredToken(data.token); setToken(data.token); }
       setSessionError(null);
-      setUser({ userId: data.userId, username: data.username, fullName: data.fullName, role: data.role });
+      setUser({
+        userId: data.userId,
+        username: data.username,
+        fullName: data.fullName || "",
+        role: data.role,
+        photoUrl: data.photoUrl || "",
+      });
     }, []);
 
     const logout = useCallback(async () => {
       const storedToken = getStoredToken();
       const headers: Record<string, string> = {};
       if (storedToken) headers["Authorization"] = `Bearer ${storedToken}`;
-      await fetch(`${API_BASE}/api/auth/logout`, { method: "POST", credentials: "include", headers });
+      await fetch(`${API_BASE}/api/auth/logout`, { method: "POST", credentials: "include", headers }).catch(() => {});
       clearStoredToken();
       setToken(null);
       setUser(null);
