@@ -19,6 +19,7 @@ import AccountsPage from "./pages/accounts";
 import FinancePage from "./pages/finance";
 import ReportsPage from "./pages/reports";
 import UsersPage from "./pages/users";
+import EmployeesPage from "./pages/employees";
 import WhatsAppPage from "./pages/whatsapp";
 import PrivacyPolicyPage from "./pages/privacy-policy";
 import CompanySettingsPage from "./pages/company-settings";
@@ -70,6 +71,7 @@ function AppRoutes() {
       <Route path="/finance" component={() => <ProtectedRoute component={FinancePage} />} />
       <Route path="/reports" component={() => <ProtectedRoute component={ReportsPage} />} />
       <Route path="/users" component={() => <ProtectedRoute component={UsersPage} />} />
+      <Route path="/employees" component={() => <ProtectedRoute component={EmployeesPage} />} />
       <Route path="/whatsapp" component={() => <ProtectedRoute component={WhatsAppPage} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={CompanySettingsPage} />} />
     </Switch>
