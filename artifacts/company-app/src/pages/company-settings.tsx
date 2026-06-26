@@ -37,7 +37,7 @@ import React, { useState, useRef } from "react";
     role: string; employeeId: number | null; permissions: string | null; isActive: boolean;
   }
 
-  interface Employee { id: number; name: string; employeeId: string; }
+  interface Employee { id: number; fullName: string; employeeNumber: string; }
 
   type Permissions = Record<string, boolean>;
 
@@ -187,6 +187,7 @@ import React, { useState, useRef } from "react";
     function handleUserSave() {
       if (!userForm.username.trim()) return setUserError("اسم المستخدم مطلوب");
       if (!userModal.editing && !userForm.password.trim()) return setUserError("كلمة المرور مطلوبة");
+      if (!userForm.employeeId) return setUserError("يجب اختيار موظف — لا يمكن إضافة مستخدم بدون ربطه بموظف");
       const payload = { ...userForm, id: userModal.editing?.id };
       userMutation.mutate(payload);
     }
@@ -461,18 +462,16 @@ import React, { useState, useRef } from "react";
 
                       {/* Employee linking */}
                       <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-slate-700">ربط بموظف (اختياري)</label>
+                        <label className="text-sm font-medium text-slate-700">الموظف <span className="text-red-500">*</span></label>
                         <div className="flex gap-2">
                           <select value={userForm.employeeId} onChange={e => setUserForm(p => ({ ...p, employeeId: e.target.value }))}
                             className="flex-1 rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none">
                             <option value="">— اختر موظف —</option>
                             {(employeesData || []).map(emp => (
-                              <option key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</option>
+                              <option key={emp.id} value={emp.id}>{emp.fullName} ({emp.employeeNumber})</option>
                             ))}
                           </select>
-                          <span className="flex items-center text-sm text-slate-400">أو</span>
-                          <input type="number" value={userForm.employeeId} onChange={e => setUserForm(p => ({ ...p, employeeId: e.target.value }))}
-                            className="w-32 rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none font-mono" placeholder="الرقم الوظيفي" dir="ltr" />
+
                         </div>
                       </div>
 
