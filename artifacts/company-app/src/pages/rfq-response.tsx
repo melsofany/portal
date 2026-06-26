@@ -565,35 +565,6 @@ export default function RfqResponsePage() {
                   />
                 </div>
 
-                {/* Payment terms + Offer validity */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-slate-600">
-                      شروط الدفع <span className="text-slate-400 font-normal">(اختياري)</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="مثال: 30% مقدماً، 70% عند التسليم"
-                      value={paymentTerms}
-                      onChange={e => setPaymentTerms(e.target.value)}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-[#0064d9]/20"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-slate-600">
-                      صلاحية العرض <span className="text-slate-400 font-normal">(بالأيام)</span>
-                    </label>
-                    <input
-                      type="number" min="1"
-                      placeholder="مثال: 30"
-                      value={offerValidityDays}
-                      onChange={e => setOfferValidityDays(e.target.value)}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-[#0064d9]/20"
-                      dir="ltr"
-                    />
-                  </div>
-                </div>
-
                 {/* Notes / terms */}
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-slate-600">ملاحظات إضافية <span className="text-slate-400 font-normal">(اختياري)</span></label>
@@ -608,6 +579,43 @@ export default function RfqResponsePage() {
               </div>
             )}
 
+            {/* Payment terms + Offer validity — always visible */}
+            <div className="rounded-xl bg-white border border-slate-200 shadow-sm p-5 space-y-4">
+              <h3 className="text-sm font-bold text-slate-700 border-b pb-2">شروط الدفع وصلاحية العرض</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-600">
+                    شروط الدفع <span className="text-slate-400 font-normal">(اختياري)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="مثال: 30% مقدماً، 70% عند التسليم"
+                    value={paymentTerms}
+                    onChange={e => setPaymentTerms(e.target.value)}
+                    disabled={isFormDisabled}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-[#0064d9]/20 disabled:bg-slate-50 disabled:text-slate-400"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-slate-600">
+                    صلاحية العرض <span className="text-slate-400 font-normal">(بالأيام)</span>
+                  </label>
+                  <input
+                    type="number" min="1"
+                    placeholder="مثال: 30"
+                    value={offerValidityDays}
+                    onChange={e => setOfferValidityDays(e.target.value)}
+                    disabled={isFormDisabled}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-[#0064d9]/20 disabled:bg-slate-50 disabled:text-slate-400"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+              {isFormDisabled && (
+                <p className="text-xs text-slate-400">تم إرسال العرض — هذه الحقول للعرض فقط.</p>
+              )}
+            </div>
+
             {/* Submitted details (read-only view) */}
             {submitted && (
               <div className="rounded-xl bg-white border border-slate-200 shadow-sm p-5 space-y-3 text-sm">
@@ -621,18 +629,6 @@ export default function RfqResponsePage() {
                     <div>
                       <span className="text-xs text-slate-400">مدة التوريد</span>
                       <p className="font-medium">{data.deliveryDays} يوم</p>
-                    </div>
-                  )}
-                  {data.offerValidityDays && (
-                    <div>
-                      <span className="text-xs text-slate-400">صلاحية العرض</span>
-                      <p className="font-medium">{data.offerValidityDays} يوم</p>
-                    </div>
-                  )}
-                  {data.paymentTerms && (
-                    <div>
-                      <span className="text-xs text-slate-400">شروط الدفع</span>
-                      <p className="font-medium">{data.paymentTerms}</p>
                     </div>
                   )}
                 </div>
