@@ -7,6 +7,8 @@ import { Router } from "express";
 
     const router = Router();
 
+    const MAX_FAILED_ATTEMPTS = 4;
+
     async function ensureDefaultAdmin() {
       try {
         const users = await db.select({ id: usersTable.id }).from(usersTable).limit(1);
@@ -46,10 +48,31 @@ import { Router } from "express";
         if (!user.isActive) return res.status(401).json({ error: "هذا الحساب معطل — تواصل مع المدير" });
 
         const valid = await bcrypt.compare(password, user.passwordHash);
-        if (!valid) return res.status(401).json({ error: "اسم المستخدم أو كلمة المرور غير صحيحة" });
+        if (!valid) {
+          const newAttempts = (user.failedLoginAttempts ?? 0) + 1;
+          if (newAttempts >= MAX_FAILED_ATTEMPTS) {
+            // Auto-disable after 4 failed attempts
+            await db.update(usersTable)
+              .set({ failedLoginAttempts: newAttempts, isActive: false })
+              .where(eq(usersTable.id, user.id));
+            return res.status(401).json({
+              error: `تم إيقاف الحساب تلقائياً بسبب ${MAX_FAILED_ATTEMPTS} محاولات دخول خاطئة — تواصل مع المدير لإعادة التفعيل`,
+            });
+          }
+          await db.update(usersTable)
+            .set({ failedLoginAttempts: newAttempts })
+            .where(eq(usersTable.id, user.id));
+          const remaining = MAX_FAILED_ATTEMPTS - newAttempts;
+          return res.status(401).json({
+            error: `كلمة المرور غير صحيحة — تبقى ${remaining} محاولة قبل إيقاف الحساب`,
+          });
+        }
 
+        // Success — reset failed attempts
         const sessionToken = randomUUID();
-        await db.update(usersTable).set({ sessionToken }).where(eq(usersTable.id, user.id));
+        await db.update(usersTable)
+          .set({ sessionToken, failedLoginAttempts: 0 })
+          .where(eq(usersTable.id, user.id));
 
         const jwtToken = signToken({
           userId: user.id,
@@ -167,4 +190,3 @@ import { Router } from "express";
     });
 
     export default router;
-    

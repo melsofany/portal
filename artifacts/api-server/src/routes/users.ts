@@ -19,6 +19,7 @@ import { Router } from "express";
         permissions: usersTable.permissions,
         isActive: usersTable.isActive,
         photoUrl: usersTable.photoUrl,
+        failedLoginAttempts: usersTable.failedLoginAttempts,
         createdAt: usersTable.createdAt,
       }).from(usersTable).orderBy(usersTable.id);
       res.json(users);
@@ -63,12 +64,14 @@ import { Router } from "express";
         permissions: typeof permissions === "object" ? JSON.stringify(permissions) : (permissions || "{}"),
         isActive: isActive !== undefined ? Boolean(isActive) : true,
         photoUrl: photoUrl || "",
+        failedLoginAttempts: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       }).returning({
         id: usersTable.id, username: usersTable.username, email: usersTable.email,
         fullName: usersTable.fullName, role: usersTable.role, employeeId: usersTable.employeeId,
         permissions: usersTable.permissions, isActive: usersTable.isActive, photoUrl: usersTable.photoUrl,
+        failedLoginAttempts: usersTable.failedLoginAttempts,
       });
       res.status(201).json(user);
     } catch (err: any) {
@@ -105,18 +108,63 @@ import { Router } from "express";
       if (password) {
         updates.passwordHash = await bcrypt.hash(password, 10);
         updates.sessionToken = null;
+        updates.failedLoginAttempts = 0; // reset on password change
       }
 
       const [updated] = await db.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning({
         id: usersTable.id, username: usersTable.username, email: usersTable.email,
         fullName: usersTable.fullName, role: usersTable.role, employeeId: usersTable.employeeId,
         permissions: usersTable.permissions, isActive: usersTable.isActive, photoUrl: usersTable.photoUrl,
+        failedLoginAttempts: usersTable.failedLoginAttempts,
       });
       if (!updated) return res.status(404).json({ error: "المستخدم غير موجود" });
       res.json(updated);
     } catch (err) {
       req.log.error(err, "PUT /users/:id failed");
       res.status(500).json({ error: "فشل في تحديث المستخدم" });
+    }
+  });
+
+  // PATCH /api/users/:id/toggle — enable/disable user
+  router.patch("/:id/toggle", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const [current] = await db.select({ isActive: usersTable.isActive }).from(usersTable).where(eq(usersTable.id, id)).limit(1);
+      if (!current) return res.status(404).json({ error: "المستخدم غير موجود" });
+
+      const newStatus = !current.isActive;
+      const updates: Record<string, any> = { isActive: newStatus };
+      // Reset failed attempts when re-activating
+      if (newStatus) updates.failedLoginAttempts = 0;
+
+      const [updated] = await db.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning({
+        id: usersTable.id, isActive: usersTable.isActive, failedLoginAttempts: usersTable.failedLoginAttempts,
+      });
+      res.json(updated);
+    } catch (err) {
+      req.log.error(err, "PATCH /users/:id/toggle failed");
+      res.status(500).json({ error: "فشل في تغيير حالة المستخدم" });
+    }
+  });
+
+  // PATCH /api/users/:id/password — change user password (admin action)
+  router.patch("/:id/password", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { password } = req.body;
+      if (!password || password.length < 6) {
+        return res.status(400).json({ error: "كلمة المرور قصيرة جداً (6 أحرف على الأقل)" });
+      }
+      const passwordHash = await bcrypt.hash(password, 10);
+      const [updated] = await db.update(usersTable)
+        .set({ passwordHash, sessionToken: null, failedLoginAttempts: 0 })
+        .where(eq(usersTable.id, id))
+        .returning({ id: usersTable.id, username: usersTable.username });
+      if (!updated) return res.status(404).json({ error: "المستخدم غير موجود" });
+      res.json({ success: true, ...updated });
+    } catch (err) {
+      req.log.error(err, "PATCH /users/:id/password failed");
+      res.status(500).json({ error: "فشل في تغيير كلمة المرور" });
     }
   });
 
@@ -134,4 +182,3 @@ import { Router } from "express";
   });
 
   export default router;
-  

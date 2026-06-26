@@ -12,10 +12,10 @@ import { pgTable, text, serial, integer, boolean, timestamp } from "drizzle-orm/
     permissions: text("permissions").default("{}"),
     isActive: boolean("is_active").notNull().default(true),
     photoUrl: text("photo_url").default(""),
+    failedLoginAttempts: integer("failed_login_attempts").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
   });
 
   export type User = typeof usersTable.$inferSelect;
   export type InsertUser = typeof usersTable.$inferInsert;
-  
