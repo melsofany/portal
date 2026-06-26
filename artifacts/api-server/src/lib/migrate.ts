@@ -551,6 +551,11 @@ import { pool } from "@workspace/db";
             ALTER TABLE users ALTER COLUMN updated_at SET NOT NULL;
           `);
 
+          // Add failed_login_attempts column if not exists (new column for auto-disable feature)
+          await client.query(`
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER NOT NULL DEFAULT 0;
+          `);
+
           console.log("[migrate] Schema ready");
     } finally {
       client.release();
