@@ -166,6 +166,8 @@ export default function EmployeesPage() {
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const [viewEmployee, setViewEmployee] = useState<Employee | null>(null);
   const [form, setForm] = useState<Partial<Employee>>(emptyForm());
+  const [formTab, setFormTab] = useState("personal");
+  const [formError, setFormError] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<Employee | null>(null);
   const [showSalaryForm, setShowSalaryForm] = useState(false);
   const [salaryForm, setSalaryForm] = useState({
@@ -206,6 +208,10 @@ export default function EmployeesPage() {
       qc.invalidateQueries({ queryKey: ["employees-stats"] });
       setShowForm(false);
       setForm(emptyForm());
+      setFormError("");
+    },
+    onError: (err: any) => {
+      setFormError(err?.message ?? "حدث خطأ أثناء إضافة الموظف. تأكد من الاتصال بالخادم.");
     },
   });
 
@@ -219,6 +225,10 @@ export default function EmployeesPage() {
       setShowForm(false);
       setEditEmployee(null);
       setForm(emptyForm());
+      setFormError("");
+    },
+    onError: (err: any) => {
+      setFormError(err?.message ?? "حدث خطأ أثناء تعديل بيانات الموظف.");
     },
   });
 
@@ -270,17 +280,26 @@ export default function EmployeesPage() {
   function openAdd() {
     setEditEmployee(null);
     setForm(emptyForm());
+    setFormTab("personal");
+    setFormError("");
     setShowForm(true);
   }
 
   function openEdit(emp: Employee) {
     setEditEmployee(emp);
     setForm({ ...emp });
+    setFormTab("personal");
+    setFormError("");
     setShowForm(true);
   }
 
   function handleSubmit() {
-    if (!form.fullName?.trim()) return;
+    if (!form.fullName?.trim()) {
+      setFormTab("personal");
+      setFormError("الاسم الكامل مطلوب. يرجى ملء حقل الاسم في تبويب البيانات الشخصية.");
+      return;
+    }
+    setFormError("");
     if (editEmployee) {
       updateMutation.mutate({ id: editEmployee.id, data: form });
     } else {
@@ -446,13 +465,20 @@ export default function EmployeesPage() {
       </div>
 
       {/* Add/Edit Employee Modal */}
-      <Dialog open={showForm} onOpenChange={(o) => { if (!o) { setShowForm(false); setEditEmployee(null); setForm(emptyForm()); } }}>
+      <Dialog open={showForm} onOpenChange={(o) => { if (!o) { setShowForm(false); setEditEmployee(null); setForm(emptyForm()); setFormTab("personal"); setFormError(""); } }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" dir="rtl">
           <DialogHeader>
             <DialogTitle>{editEmployee ? "تعديل بيانات الموظف" : "إضافة موظف جديد"}</DialogTitle>
           </DialogHeader>
 
-          <Tabs defaultValue="personal">
+          {formError && (
+            <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {formError}
+            </div>
+          )}
+
+          <Tabs value={formTab} onValueChange={setFormTab}>
             <TabsList className="w-full grid grid-cols-4">
               <TabsTrigger value="personal">البيانات الشخصية</TabsTrigger>
               <TabsTrigger value="job">بيانات الوظيفة</TabsTrigger>
@@ -586,7 +612,7 @@ export default function EmployeesPage() {
           </Tabs>
 
           <DialogFooter className="mt-4 gap-2">
-            <Button variant="outline" onClick={() => { setShowForm(false); setEditEmployee(null); setForm(emptyForm()); }}>إلغاء</Button>
+            <Button variant="outline" onClick={() => { setShowForm(false); setEditEmployee(null); setForm(emptyForm()); setFormTab("personal"); setFormError(""); }}>إلغاء</Button>
             <Button
               className="bg-[#1e3a5f] hover:bg-[#162d4a]"
               onClick={handleSubmit}
