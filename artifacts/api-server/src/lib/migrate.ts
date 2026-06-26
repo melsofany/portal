@@ -543,7 +543,13 @@ import { pool } from "@workspace/db";
               );
             `);
 
-            console.log("[migrate] Schema ready");
+            // Ensure updated_at always has a DB-level DEFAULT (drizzle-kit push may remove it)
+          await client.query(`
+            ALTER TABLE users ALTER COLUMN updated_at SET DEFAULT NOW();
+            ALTER TABLE users ALTER COLUMN updated_at SET NOT NULL;
+          `);
+
+          console.log("[migrate] Schema ready");
     } finally {
       client.release();
     }
