@@ -429,6 +429,64 @@ import { pool } from "@workspace/db";
               ALTER TABLE users ADD COLUMN IF NOT EXISTS session_token TEXT;
             `);
 
+            // Add missing users columns (permissions, employee, active flag, photo)
+              await client.query(`
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_id INTEGER;
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions TEXT DEFAULT '{}';
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_url TEXT DEFAULT '';
+              `);
+
+              // Add HR employee sub-tables if not present
+              await client.query(`
+                CREATE TABLE IF NOT EXISTS employee_leaves (
+                  id SERIAL PRIMARY KEY,
+                  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+                  leave_type TEXT NOT NULL DEFAULT 'annual',
+                  start_date TEXT NOT NULL,
+                  end_date TEXT NOT NULL,
+                  total_days INTEGER NOT NULL DEFAULT 1,
+                  reason TEXT,
+                  status TEXT NOT NULL DEFAULT 'approved',
+                  notes TEXT,
+                  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                CREATE TABLE IF NOT EXISTS employee_attendance (
+                  id SERIAL PRIMARY KEY,
+                  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+                  attendance_date TEXT NOT NULL,
+                  check_in TEXT,
+                  check_out TEXT,
+                  status TEXT NOT NULL DEFAULT 'present',
+                  hours_worked NUMERIC(5,2),
+                  notes TEXT,
+                  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                CREATE TABLE IF NOT EXISTS employee_bonuses (
+                  id SERIAL PRIMARY KEY,
+                  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+                  bonus_type TEXT NOT NULL DEFAULT 'performance',
+                  amount NUMERIC(12,2) NOT NULL,
+                  reason TEXT,
+                  bonus_date TEXT NOT NULL,
+                  paid BOOLEAN NOT NULL DEFAULT FALSE,
+                  paid_at TIMESTAMPTZ,
+                  notes TEXT,
+                  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                CREATE TABLE IF NOT EXISTS employee_penalties (
+                  id SERIAL PRIMARY KEY,
+                  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+                  penalty_type TEXT NOT NULL DEFAULT 'other',
+                  amount NUMERIC(12,2) NOT NULL,
+                  reason TEXT NOT NULL,
+                  penalty_date TEXT NOT NULL,
+                  deducted BOOLEAN NOT NULL DEFAULT FALSE,
+                  notes TEXT,
+                  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+              `);
+
             // HR Employees module tables
             await client.query(`
               CREATE TABLE IF NOT EXISTS employees (
