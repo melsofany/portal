@@ -38,6 +38,8 @@ export const supplierQuotationSuppliersTable = pgTable("supplier_quotation_suppl
   vatIncluded: text("vat_included").default("no"),
   deliveryDays: integer("delivery_days"),
   responseNotes: text("response_notes").default(""),
+  paymentTerms: text("payment_terms").default(""),
+  offerValidityDays: integer("offer_validity_days"),
   firstOpenedAt: timestamp("first_opened_at", { withTimezone: true }),
 });
 
