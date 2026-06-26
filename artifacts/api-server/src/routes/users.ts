@@ -72,7 +72,7 @@ import { Router } from "express";
     } catch (err: any) {
       if (err?.code === "23505") return res.status(409).json({ error: "هذا الموظف لديه حساب مستخدم بالفعل" });
       req.log.error(err, "POST /users failed");
-      res.status(500).json({ error: "فشل في إنشاء المستخدم" });
+      res.status(500).json({ error: "فشل في إنشاء المستخدم", debug: String(err?.message || err), code: err?.code, detail: err?.detail });
     }
   });
 
