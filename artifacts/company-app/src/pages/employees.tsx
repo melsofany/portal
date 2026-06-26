@@ -765,7 +765,7 @@ export default function EmployeesPage() {
               </FormField>
               <FormField label="الصافي">
                 <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-green-700">
-                  {((parseFloat(salaryForm.baseSalary || empDetail?.baseSalary ?? "0") || 0) + (parseFloat(salaryForm.allowances) || 0) - (parseFloat(salaryForm.deductions) || 0)).toLocaleString()} ج
+                  {((parseFloat(salaryForm.baseSalary || (empDetail?.baseSalary ?? "0")) || 0) + (parseFloat(salaryForm.allowances) || 0) - (parseFloat(salaryForm.deductions) || 0)).toLocaleString()} ج
                 </div>
               </FormField>
             </div>
