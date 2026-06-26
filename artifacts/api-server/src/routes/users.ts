@@ -63,6 +63,7 @@ import { Router } from "express";
         permissions: typeof permissions === "object" ? JSON.stringify(permissions) : (permissions || "{}"),
         isActive: isActive !== undefined ? Boolean(isActive) : true,
         photoUrl: photoUrl || "",
+        updatedAt: new Date(),
       }).returning({
         id: usersTable.id, username: usersTable.username, email: usersTable.email,
         fullName: usersTable.fullName, role: usersTable.role, employeeId: usersTable.employeeId,
@@ -72,7 +73,7 @@ import { Router } from "express";
     } catch (err: any) {
       if (err?.code === "23505") return res.status(409).json({ error: "هذا الموظف لديه حساب مستخدم بالفعل" });
       req.log.error(err, "POST /users failed");
-      res.status(500).json({ error: "فشل في إنشاء المستخدم" });
+      res.status(500).json({ error: "فشل في إنشاء المستخدم", debug: String(err?.message || err), code: err?.code, detail: err?.detail });
     }
   });
 
