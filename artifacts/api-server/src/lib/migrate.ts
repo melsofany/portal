@@ -429,6 +429,62 @@ import { pool } from "@workspace/db";
               ALTER TABLE users ADD COLUMN IF NOT EXISTS session_token TEXT;
             `);
 
+            // HR Employees module tables
+            await client.query(`
+              CREATE TABLE IF NOT EXISTS employees (
+                id SERIAL PRIMARY KEY,
+                employee_number TEXT NOT NULL UNIQUE,
+                full_name TEXT NOT NULL,
+                national_id TEXT,
+                phone TEXT,
+                email TEXT,
+                address TEXT,
+                birth_date TEXT,
+                hire_date TEXT,
+                department TEXT,
+                job_title TEXT,
+                base_salary NUMERIC(12,2),
+                allowances NUMERIC(12,2) DEFAULT 0,
+                deductions NUMERIC(12,2) DEFAULT 0,
+                bank_name TEXT,
+                bank_account TEXT,
+                status TEXT NOT NULL DEFAULT 'active',
+                contract_type TEXT DEFAULT 'full-time',
+                notes TEXT,
+                appointment_doc_url TEXT,
+                appointment_doc_name TEXT,
+                emergency_contact_name TEXT,
+                emergency_contact_phone TEXT,
+                emergency_contact_relation TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+              );
+
+              CREATE TABLE IF NOT EXISTS employee_documents (
+                id SERIAL PRIMARY KEY,
+                employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+                doc_name TEXT NOT NULL,
+                doc_type TEXT NOT NULL,
+                doc_url TEXT NOT NULL,
+                uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+              );
+
+              CREATE TABLE IF NOT EXISTS salary_records (
+                id SERIAL PRIMARY KEY,
+                employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+                month TEXT NOT NULL,
+                year INTEGER NOT NULL,
+                base_salary NUMERIC(12,2) NOT NULL,
+                allowances NUMERIC(12,2) DEFAULT 0,
+                deductions NUMERIC(12,2) DEFAULT 0,
+                net_salary NUMERIC(12,2) NOT NULL,
+                paid BOOLEAN NOT NULL DEFAULT FALSE,
+                paid_at TIMESTAMPTZ,
+                notes TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+              );
+            `);
+
             console.log("[migrate] Schema ready");
     } finally {
       client.release();
