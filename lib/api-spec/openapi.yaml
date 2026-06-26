@@ -10,13 +10,22 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: suppliers
+    description: Supplier operations
+  - name: supplier-categories
+    description: Supplier category operations
+  - name: supplier-payment-methods
+    description: Supplier payment method operations
+  - name: customers
+    description: Customer operations
+  - name: customer-quotations
+    description: Customer quotation operations
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +33,472 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /suppliers:
+    get:
+      operationId: getSuppliers
+      tags: [suppliers]
+      summary: List all suppliers
+      responses:
+        "200":
+          description: List of suppliers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Supplier"
+    post:
+      operationId: createSupplier
+      tags: [suppliers]
+      summary: Create a new supplier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupplierInput"
+      responses:
+        "201":
+          description: Supplier created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Supplier"
+        "409":
+          description: Conflict - duplicate phone/email/whatsapp
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /suppliers/{id}:
+    put:
+      operationId: updateSupplier
+      tags: [suppliers]
+      summary: Update a supplier
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSupplierInput"
+      responses:
+        "200":
+          description: Updated supplier
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Supplier"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Conflict - duplicate phone/email/whatsapp
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteSupplier
+      tags: [suppliers]
+      summary: Delete a supplier
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /suppliers/{id}/payment-methods:
+    get:
+      operationId: getSupplierPaymentMethods
+      tags: [supplier-payment-methods]
+      summary: List payment methods for a supplier
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of payment methods
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SupplierPaymentMethod"
+        "404":
+          description: Supplier not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createSupplierPaymentMethod
+      tags: [supplier-payment-methods]
+      summary: Add a payment method to a supplier
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupplierPaymentMethodInput"
+      responses:
+        "201":
+          description: Payment method created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierPaymentMethod"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Supplier not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /suppliers/{id}/payment-methods/{pmId}:
+    put:
+      operationId: updateSupplierPaymentMethod
+      tags: [supplier-payment-methods]
+      summary: Update a payment method
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: pmId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupplierPaymentMethodInput"
+      responses:
+        "200":
+          description: Updated payment method
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierPaymentMethod"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteSupplierPaymentMethod
+      tags: [supplier-payment-methods]
+      summary: Delete a payment method
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: pmId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /supplier-categories:
+    get:
+      operationId: getSupplierCategories
+      tags: [supplier-categories]
+      summary: List all supplier categories
+      responses:
+        "200":
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SupplierCategory"
+    post:
+      operationId: createSupplierCategory
+      tags: [supplier-categories]
+      summary: Create a new supplier category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupplierCategoryInput"
+      responses:
+        "201":
+          description: Category created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierCategory"
+        "409":
+          description: Conflict - duplicate name
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /supplier-categories/{id}:
+    delete:
+      operationId: deleteSupplierCategory
+      tags: [supplier-categories]
+      summary: Delete a supplier category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /customers:
+    get:
+      operationId: getCustomers
+      tags: [customers]
+      summary: List all customers
+      responses:
+        "200":
+          description: List of customers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Customer"
+    post:
+      operationId: createCustomer
+      tags: [customers]
+      summary: Create a new customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomerInput"
+      responses:
+        "201":
+          description: Customer created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Conflict - duplicate field
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /customers/{id}:
+    put:
+      operationId: updateCustomer
+      tags: [customers]
+      summary: Update a customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCustomerInput"
+      responses:
+        "200":
+          description: Customer updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteCustomer
+      tags: [customers]
+      summary: Delete a customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /customer-quotations:
+    get:
+      operationId: getCustomerQuotations
+      tags: [customer-quotations]
+      summary: List all customer quotations
+      responses:
+        "200":
+          description: List of quotations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CustomerQuotation"
+    post:
+      operationId: createCustomerQuotation
+      tags: [customer-quotations]
+      summary: Create a new customer quotation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomerQuotationInput"
+      responses:
+        "201":
+          description: Quotation created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerQuotation"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /customer-quotations/{id}:
+    get:
+      operationId: getCustomerQuotation
+      tags: [customer-quotations]
+      summary: Get a single customer quotation with items
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Quotation with items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerQuotation"
+    delete:
+      operationId: deleteCustomerQuotation
+      tags: [customer-quotations]
+      summary: Delete a customer quotation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +509,347 @@ components:
       required:
         - status
 
+    Supplier:
+      type: object
+      properties:
+        id:
+          type: integer
+        companyName:
+          type: string
+        contactName:
+          type: string
+        phone:
+          type: string
+        whatsapp:
+          type: string
+        email:
+          type: string
+        address:
+          type: string
+        commercialReg:
+          type: string
+        taxReg:
+          type: string
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplierCategory"
+        status:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - companyName
+        - status
+        - createdAt
+        - categories
+
+    CreateSupplierInput:
+      type: object
+      properties:
+        companyName:
+          type: string
+        contactName:
+          type: string
+        phone:
+          type: string
+        whatsapp:
+          type: string
+        email:
+          type: string
+        address:
+          type: string
+        commercialReg:
+          type: string
+        taxReg:
+          type: string
+        categoryIds:
+          type: array
+          items:
+            type: integer
+      required:
+        - companyName
+
+    UpdateSupplierInput:
+      type: object
+      properties:
+        companyName:
+          type: string
+        contactName:
+          type: string
+        phone:
+          type: string
+        whatsapp:
+          type: string
+        email:
+          type: string
+        address:
+          type: string
+        commercialReg:
+          type: string
+        taxReg:
+          type: string
+        status:
+          type: string
+        categoryIds:
+          type: array
+          items:
+            type: integer
+      required:
+        - companyName
+
+    SupplierPaymentMethod:
+      type: object
+      properties:
+        id:
+          type: integer
+        supplierId:
+          type: integer
+        type:
+          type: string
+        walletType:
+          type: string
+        ownerName:
+          type: string
+        phone:
+          type: string
+        bankName:
+          type: string
+        accountNumber:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - supplierId
+        - type
+        - createdAt
+
+    CreateSupplierPaymentMethodInput:
+      type: object
+      properties:
+        type:
+          type: string
+          description: "cash | wallet | instapay | bank"
+        walletType:
+          type: string
+          description: "e.g. فودافون كاش, أورانج كاش — required when type=wallet"
+        ownerName:
+          type: string
+        phone:
+          type: string
+          description: "Egyptian format +201XXXXXXXXX — required for wallet and instapay"
+        bankName:
+          type: string
+          description: "required when type=bank"
+        accountNumber:
+          type: string
+          description: "required when type=bank"
+      required:
+        - type
+
+    SupplierCategory:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - createdAt
+
+    CreateSupplierCategoryInput:
+      type: object
+      properties:
+        name:
+          type: string
+      required:
+        - name
+
+    Customer:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: string
+        whatsapp:
+          type: string
+        email:
+          type: string
+        address:
+          type: string
+        commercialReg:
+          type: string
+        taxReg:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - status
+        - createdAt
+
+    CreateCustomerInput:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        whatsapp:
+          type: string
+        email:
+          type: string
+        address:
+          type: string
+        commercialReg:
+          type: string
+        taxReg:
+          type: string
+      required:
+        - name
+
+    UpdateCustomerInput:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        whatsapp:
+          type: string
+        email:
+          type: string
+        address:
+          type: string
+        commercialReg:
+          type: string
+        taxReg:
+          type: string
+        status:
+          type: string
+      required:
+        - name
+
+    CustomerQuotationItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        quotationId:
+          type: integer
+        customerItemCode:
+          type: string
+        description:
+          type: string
+        partNo:
+          type: string
+        unit:
+          type: string
+        quantity:
+          type: string
+        sortOrder:
+          type: integer
+      required:
+        - id
+        - quotationId
+        - description
+        - quantity
+
+    CustomerQuotation:
+      type: object
+      properties:
+        id:
+          type: integer
+        quotationNo:
+          type: string
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        responsibleName:
+          type: string
+        requestDate:
+          type: string
+        expiryDate:
+          type: string
+        customerOrderNo:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomerQuotationItem"
+      required:
+        - id
+        - quotationNo
+        - customerId
+        - requestDate
+        - status
+        - createdAt
+
+    CreateCustomerQuotationInput:
+      type: object
+      properties:
+        customerId:
+          type: integer
+        responsibleName:
+          type: string
+        requestDate:
+          type: string
+        expiryDate:
+          type: string
+        customerOrderNo:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              customerItemCode:
+                type: string
+              description:
+                type: string
+              partNo:
+                type: string
+              unit:
+                type: string
+              quantity:
+                type: number
+            required:
+              - description
+              - quantity
+      required:
+        - customerId
+        - requestDate
+        - items
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+      required:
+        - success
