@@ -11,6 +11,7 @@ import type { Request, Response, NextFunction } from "express";
     fullName: string;
     role: string;
     sessionToken?: string;
+    photoUrl?: string;
   }
 
   declare global {
@@ -38,7 +39,6 @@ import type { Request, Response, NextFunction } from "express";
       return res.status(401).json({ error: "جلسة منتهية، يرجى تسجيل الدخول مجدداً" });
     }
 
-    // Single-session check: verify sessionToken still matches DB
     if (payload.sessionToken) {
       try {
         const [user] = await db
@@ -51,7 +51,7 @@ import type { Request, Response, NextFunction } from "express";
           return res.status(401).json({ error: "تم تسجيل الدخول من جهاز آخر. يرجى تسجيل الدخول مجدداً" });
         }
       } catch {
-        // DB error — allow through to avoid locking everyone out
+        // DB error — allow through
       }
     }
 
