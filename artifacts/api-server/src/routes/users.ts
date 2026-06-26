@@ -72,7 +72,8 @@ import { Router } from "express";
       });
       res.status(201).json(user);
     } catch (err: any) {
-      if (err?.code === "23505") return res.status(409).json({ error: "هذا الموظف لديه حساب مستخدم بالفعل" });
+      const pgCode = err?.code || err?.cause?.code;
+      if (pgCode === "23505") return res.status(409).json({ error: "هذا الموظف لديه حساب مستخدم بالفعل" });
       req.log.error(err, "POST /users failed");
       res.status(500).json({ error: "فشل في إنشاء المستخدم" });
     }
