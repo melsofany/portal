@@ -17,6 +17,7 @@ import { Router, type IRouter } from "express";
   import deliveryPermitsRouter from "./delivery-permits";
 import itemsRouter from "./items";
 import dashboardRouter from "./dashboard";
+import employeesRouter from "./employees";
   import { requireAuth } from "../middlewares/authMiddleware";
     import { db } from "@workspace/db";
     import { companySettingsTable } from "@workspace/db/schema";
@@ -81,6 +82,6 @@ import dashboardRouter from "./dashboard";
   router.use("/delivery-permits", deliveryPermitsRouter);
   router.use("/items", itemsRouter);
   router.use("/dashboard", dashboardRouter);
+  router.use("/employees", employeesRouter);
 
   export default router;
-  
