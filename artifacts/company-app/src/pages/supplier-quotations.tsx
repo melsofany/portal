@@ -8,6 +8,7 @@ import {
   Send, FileText, Mail, MessageSquare, Trash2, ChevronDown, ChevronUp,
   Search, CheckSquare, Square, X, ArrowRight, ArrowLeft,
   Link as LinkIcon, Copy, BarChart3, Check, Clock, Loader2, UserPlus, Eye, EyeOff,
+  ChevronRight,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -219,25 +220,19 @@ async function sendWhatsApp(supplier: RfqSupplier | Supplier, rfqNo: string, req
   const raw = supplier.whatsapp || supplier.phone || "";
   if (!raw) { alert("لا يوجد رقم واتساب أو هاتف لهذا المورد"); return "error"; }
   const msg = buildWhatsAppMessage(rfqNo, requestDate, supplier.companyName, items, token);
-
   try {
     const res = await fetch(`${API_BASE}/api/whatsapp/send`, {
-      method: "POST",
-      credentials: "include",
+      method: "POST", credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ to: raw, message: msg }),
     });
     const data = await res.json() as any;
-
     if (res.status === 503 && data?.hint) {
       const phone = raw.replace(/[^0-9]/g, "");
       window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
       return "fallback";
     }
-    if (!res.ok) {
-      alert(`فشل الإرسال: ${data?.error ?? "خطأ غير معروف"}`);
-      return "error";
-    }
+    if (!res.ok) { alert(`فشل الإرسال: ${data?.error ?? "خطأ غير معروف"}`); return "error"; }
     return "sent";
   } catch {
     const phone = raw.replace(/[^0-9]/g, "");
@@ -251,6 +246,28 @@ function openEmail(supplier: RfqSupplier | Supplier, rfqNo: string, requestDate:
   const subject = encodeURIComponent(`طلب تسعير - ${rfqNo}`);
   const body = encodeURIComponent(buildWhatsAppMessage(rfqNo, requestDate, supplier.companyName, items, token));
   window.open(`mailto:${supplier.email}?subject=${subject}&body=${body}`, "_blank");
+}
+
+// ─── Status Badge ─────────────────────────────────────────────────────────────
+
+function StatusBadge({ status }: { status: string }) {
+  const cfg: Record<string, string> = {
+    "مكتمل":               "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20",
+    "مرسل":                "bg-blue-50 text-blue-700 ring-1 ring-blue-600/20",
+    "تم التسعير من المورد": "bg-amber-50 text-amber-700 ring-1 ring-amber-600/20",
+  };
+  const cls = cfg[status] ?? "bg-slate-100 text-slate-600 ring-1 ring-slate-400/20";
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${cls}`}>{status}</span>;
+}
+
+// ─── SAP Table Header Cell ────────────────────────────────────────────────────
+
+function TH({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <th className={`px-3 py-2.5 text-right text-[11px] font-semibold text-slate-600 whitespace-nowrap border-l border-slate-300/60 last:border-l-0 ${className}`}>
+      {children}
+    </th>
+  );
 }
 
 // ─── Analysis Modal ───────────────────────────────────────────────────────────
@@ -272,12 +289,10 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
     const v = parseFloat(p.unitPrice);
     return isNaN(v) ? null : v;
   }
-
   function getBestPrice(itemId: number): number | null {
     const prices = submittedSuppliers.map(s => getPrice(s, itemId)).filter((p): p is number => p !== null && p > 0);
     return prices.length ? Math.min(...prices) : null;
   }
-
   function getSupplierTotal(supplier: AnalysisData['suppliers'][0]): number {
     return (data?.items ?? []).reduce((sum, item) => {
       const price = getPrice(supplier, item.id);
@@ -285,45 +300,31 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
       return sum + (price ?? 0) * qty;
     }, 0);
   }
-
   function getItemsCovered(supplier: AnalysisData['suppliers'][0]): number {
-    return (data?.items ?? []).filter(item => {
-      const p = getPrice(supplier, item.id);
-      return p !== null && p > 0;
-    }).length;
+    return (data?.items ?? []).filter(item => { const p = getPrice(supplier, item.id); return p !== null && p > 0; }).length;
   }
-
   function getBestTotalSupplier(): string {
     if (!data || submittedSuppliers.length === 0) return '';
-    const totals = submittedSuppliers.map(s => ({ name: s.companyName, total: getSupplierTotal(s) }));
-    const nonZero = totals.filter(t => t.total > 0);
+    const nonZero = submittedSuppliers.map(s => ({ name: s.companyName, total: getSupplierTotal(s) })).filter(t => t.total > 0);
     if (!nonZero.length) return '';
     return nonZero.sort((a, b) => a.total - b.total)[0].name;
   }
-
   function printAnalysis() {
     if (!data) return;
     const today = new Date().toLocaleDateString('ar-SA', { year: 'numeric', month: 'long', day: 'numeric' });
     const totalItems = data.items.length;
-
     const suppTotals = submittedSuppliers.map(s => ({
-      name: s.companyName,
-      total: getSupplierTotal(s),
+      name: s.companyName, total: getSupplierTotal(s),
       covered: data.items.filter(item => { const p = getPrice(s, item.id); return p !== null && p > 0; }).length,
-    })).sort((a, b) => {
-      if (a.total > 0 && b.total > 0) return a.total - b.total;
-      return a.total > 0 ? -1 : 1;
-    });
+    })).sort((a, b) => { if (a.total > 0 && b.total > 0) return a.total - b.total; return a.total > 0 ? -1 : 1; });
     const bestName = getBestTotalSupplier();
     const minTotal = suppTotals.filter(s => s.total > 0)[0]?.total ?? 0;
     const maxTotal = Math.max(...suppTotals.map(s => s.total), 1);
-
     const leaderRows = suppTotals.map((s, i) => {
       const cov = totalItems > 0 ? Math.round((s.covered / totalItems) * 100) : 0;
       const isBest = s.name === bestName && s.total > 0;
       const barW = s.total > 0 ? Math.round((s.total / maxTotal) * 100) : 0;
-      return `<tr>
-        <td style="padding:8px 10px;border-bottom:1px solid #eee;color:#888;font-size:11px">${i + 1}</td>
+      return `<tr><td style="padding:8px 10px;border-bottom:1px solid #eee;color:#888;font-size:11px">${i + 1}</td>
         <td style="padding:8px 10px;border-bottom:1px solid #eee;font-weight:${isBest ? '700' : '500'};color:${isBest ? '#15803d' : '#1e293b'}">${s.name}${isBest ? ' ★' : ''}</td>
         <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center;font-size:11px">${s.covered} / ${totalItems}</td>
         <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center">
@@ -337,243 +338,108 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
         <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center;font-family:monospace;font-weight:700;color:${isBest ? '#15803d' : '#334155'}">${s.total > 0 ? s.total.toFixed(3) : '—'}</td>
       </tr>`;
     }).join('');
-
     const headerCols = submittedSuppliers.map(s => `<th style="padding:10px 8px;background:#1e3a5f;color:#fff;font-size:11px;text-align:center;min-width:100px">${s.companyName}</th>`).join('');
-
     const bodyRows = data.items.map((item, idx) => {
       const best = getBestPrice(item.id);
       const cells = submittedSuppliers.map(s => {
         const price = getPrice(s, item.id);
         const qty = parseFloat(item.quantity) || 0;
         const isBest = price !== null && price > 0 && best !== null && price === best;
-        return `<td style="padding:8px;border-bottom:1px solid #eee;text-align:center;background:${isBest ? '#f0fdf4' : 'transparent'}">
-          ${price !== null && price > 0
-            ? `<div style="font-family:monospace;font-weight:${isBest ? '700' : '500'};color:${isBest ? '#15803d' : '#1e293b'}">${price.toFixed(3)}${isBest ? ' ★' : ''}</div><div style="font-family:monospace;font-size:10px;color:#94a3b8">${(price * qty).toFixed(3)}</div>`
-            : '<span style="color:#cbd5e1">—</span>'}
-        </td>`;
+        return `<td style="padding:8px;border-bottom:1px solid #eee;text-align:center;background:${isBest ? '#f0fdf4' : 'transparent'}">${price !== null && price > 0 ? `<div style="font-family:monospace;font-weight:${isBest ? '700' : '500'};color:${isBest ? '#15803d' : '#1e293b'}">${price.toFixed(3)}${isBest ? ' ★' : ''}</div><div style="font-family:monospace;font-size:10px;color:#94a3b8">${(price * qty).toFixed(3)}</div>` : '<span style="color:#cbd5e1">—</span>'}</td>`;
       }).join('');
-      const bestCell = best !== null
-        ? `<td style="padding:8px;border-bottom:1px solid #eee;text-align:center;background:#eff6ff;font-family:monospace;font-weight:700;color:#1d4ed8">${best.toFixed(3)}</td>`
-        : `<td style="padding:8px;border-bottom:1px solid #eee;text-align:center;color:#cbd5e1">—</td>`;
-      return `<tr style="background:${idx % 2 === 0 ? '#fff' : '#f8fafc'}">
-        <td style="padding:8px 10px;border-bottom:1px solid #eee;font-weight:500">${item.description}${item.partNo ? `<div style='font-size:10px;color:#94a3b8'>${item.partNo}</div>` : ''}</td>
-        <td style="padding:8px;border-bottom:1px solid #eee;text-align:center;font-size:11px;color:#64748b;font-family:monospace">${item.quantity} ${item.unit || ''}</td>
-        ${cells}${bestCell}
-      </tr>`;
+      const bestCell = best !== null ? `<td style="padding:8px;border-bottom:1px solid #eee;text-align:center;background:#eff6ff;font-family:monospace;font-weight:700;color:#1d4ed8">${best.toFixed(3)}</td>` : `<td style="padding:8px;border-bottom:1px solid #eee;text-align:center;color:#cbd5e1">—</td>`;
+      return `<tr style="background:${idx % 2 === 0 ? '#fff' : '#f8fafc'}"><td style="padding:8px 10px;border-bottom:1px solid #eee;font-weight:500">${item.description}${item.partNo ? `<div style='font-size:10px;color:#94a3b8'>${item.partNo}</div>` : ''}</td><td style="padding:8px;border-bottom:1px solid #eee;text-align:center;font-size:11px;color:#64748b;font-family:monospace">${item.quantity} ${item.unit || ''}</td>${cells}${bestCell}</tr>`;
     }).join('');
-
-    const totalCells = submittedSuppliers.map(s => {
-      const t = getSupplierTotal(s);
-      const isBest = s.companyName === bestName && t > 0;
-      return `<td style="padding:10px 8px;text-align:center;font-family:monospace;font-weight:700;color:${isBest ? '#15803d' : '#334155'};background:${isBest ? '#f0fdf4' : 'transparent'}">${t > 0 ? t.toFixed(3) : '—'}${isBest ? ' ★' : ''}</td>`;
-    }).join('');
-
-    const html = `<!DOCTYPE html>
-<html dir="rtl" lang="ar">
-<head>
-<meta charset="UTF-8">
-<title>تحليل الأسعار - ${rfqNo}</title>
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:Arial,Helvetica,sans-serif; font-size:12px; color:#111; padding:12mm 16mm; }
-  .header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px solid #0f2240; padding-bottom:14px; margin-bottom:18px; }
-  .logo h1 { font-size:20px; font-weight:bold; color:#0f2240; }
-  .logo p { font-size:10px; color:#64748b; margin-top:3px; }
-  .rfq-info { text-align:left; font-size:11px; color:#64748b; }
-  .rfq-info strong { display:block; font-size:14px; color:#0f2240; font-family:monospace; }
-  .kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }
-  .kpi { border-radius:8px; padding:12px; text-align:center; }
-  .kpi .num { font-size:26px; font-weight:bold; }
-  .kpi .lbl { font-size:10px; margin-top:4px; }
-  .section-title { font-size:12px; font-weight:bold; color:#0f2240; border-right:3px solid #0064d9; padding-right:8px; margin-bottom:10px; }
-  table { width:100%; border-collapse:collapse; }
-  th { padding:10px 8px; background:#0f2240; color:#fff; font-size:11px; text-align:right; }
-  @media print { @page { margin:10mm; } body { padding:0; } }
-</style>
-</head>
-<body>
-<div class="header">
-  <div class="logo">
-    <h1>تحليل ومقارنة الأسعار</h1>
-    <p>تقرير تحليل عروض الموردين — طباعة في: ${today}</p>
-  </div>
-  <div class="rfq-info">
-    <strong>${rfqNo}</strong>
-    إجمالي البنود: ${totalItems}
-  </div>
-</div>
-
-<div class="kpi-grid">
-  <div class="kpi" style="background:#f1f5f9;border:1px solid #e2e8f0">
-    <div class="num" style="color:#1e293b">${totalSuppliers}</div>
-    <div class="lbl" style="color:#64748b">إجمالي الموردين</div>
-  </div>
-  <div class="kpi" style="background:#f0fdf4;border:1px solid #bbf7d0">
-    <div class="num" style="color:#15803d">${submittedSuppliers.length}</div>
-    <div class="lbl" style="color:#16a34a">استجابوا</div>
-  </div>
-  <div class="kpi" style="background:#fffbeb;border:1px solid #fde68a">
-    <div class="num" style="color:#d97706">${pendingSuppliers.length}</div>
-    <div class="lbl" style="color:#b45309">في الانتظار</div>
-  </div>
-  <div class="kpi" style="background:#eff6ff;border:1px solid #bfdbfe">
-    <div class="num" style="color:#1d4ed8">${responseRate}%</div>
-    <div class="lbl" style="color:#2563eb">نسبة الاستجابة</div>
-  </div>
-</div>
-
-${submittedSuppliers.length > 0 ? `
-<div style="margin-bottom:20px">
-  <div class="section-title">ترتيب الموردين</div>
-  <table>
-    <thead>
-      <tr>
-        <th style="width:30px">#</th>
-        <th>المورد</th>
-        <th style="text-align:center;width:80px">البنود</th>
-        <th style="text-align:center;width:120px">التغطية</th>
-        <th style="text-align:center;width:100px">الإجمالي</th>
-      </tr>
-    </thead>
-    <tbody>${leaderRows}</tbody>
-  </table>
-</div>
-
-<div>
-  <div class="section-title">تفاصيل الأسعار بند بند</div>
-  <table>
-    <thead>
-      <tr>
-        <th>البند</th>
-        <th style="text-align:center;width:70px">الكمية</th>
-        ${headerCols}
-        <th style="text-align:center;width:90px;background:#1e3a8a">أفضل سعر</th>
-      </tr>
-    </thead>
-    <tbody>${bodyRows}</tbody>
-    <tfoot>
-      <tr style="background:#f1f5f9;font-weight:bold;border-top:2px solid #cbd5e1">
-        <td style="padding:10px;font-weight:700">الإجمالي الكلي</td>
-        <td></td>
-        ${totalCells}
-        <td style="padding:10px;text-align:center;font-family:monospace;font-weight:700;color:#1d4ed8;background:#eff6ff">${minTotal > 0 ? minTotal.toFixed(3) : '—'}</td>
-      </tr>
-    </tfoot>
-  </table>
-</div>
-` : '<p style="text-align:center;color:#94a3b8;padding:40px">لم يستجب أي مورد حتى الآن</p>'}
-
-${pendingSuppliers.length > 0 ? `<p style="margin-top:14px;font-size:10px;color:#94a3b8">⏳ لم يستجب بعد: ${pendingSuppliers.map(s => s.companyName).join('، ')}</p>` : ''}
-</body>
-</html>`;
-
+    const totalCells = submittedSuppliers.map(s => { const t = getSupplierTotal(s); const isBest = s.companyName === bestName && t > 0; return `<td style="padding:10px 8px;text-align:center;font-family:monospace;font-weight:700;color:${isBest ? '#15803d' : '#334155'};background:${isBest ? '#f0fdf4' : 'transparent'}">${t > 0 ? t.toFixed(3) : '—'}${isBest ? ' ★' : ''}</td>`; }).join('');
+    const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>تحليل الأسعار - ${rfqNo}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#111;padding:12mm 16mm}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f2240;padding-bottom:14px;margin-bottom:18px}.logo h1{font-size:20px;font-weight:bold;color:#0f2240}.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}.kpi{border-radius:8px;padding:12px;text-align:center}.kpi .num{font-size:26px;font-weight:bold}.section-title{font-size:12px;font-weight:bold;color:#0f2240;border-right:3px solid #0064d9;padding-right:8px;margin-bottom:10px}table{width:100%;border-collapse:collapse}th{padding:10px 8px;background:#0f2240;color:#fff;font-size:11px;text-align:right}@media print{@page{margin:10mm}body{padding:0}}</style></head><body>
+    <div class="header"><div class="logo"><h1>تحليل ومقارنة الأسعار</h1><p style="font-size:10px;color:#64748b;margin-top:3px">طباعة في: ${today}</p></div><div style="text-align:left;font-size:11px;color:#64748b"><strong style="display:block;font-size:14px;color:#0f2240;font-family:monospace">${rfqNo}</strong>إجمالي البنود: ${totalItems}</div></div>
+    <div class="kpi-grid"><div class="kpi" style="background:#f1f5f9;border:1px solid #e2e8f0"><div class="num" style="color:#1e293b">${totalSuppliers}</div><div style="font-size:10px;color:#64748b;margin-top:4px">إجمالي الموردين</div></div><div class="kpi" style="background:#f0fdf4;border:1px solid #bbf7d0"><div class="num" style="color:#15803d">${submittedSuppliers.length}</div><div style="font-size:10px;color:#16a34a;margin-top:4px">استجابوا</div></div><div class="kpi" style="background:#fffbeb;border:1px solid #fde68a"><div class="num" style="color:#d97706">${pendingSuppliers.length}</div><div style="font-size:10px;color:#b45309;margin-top:4px">في الانتظار</div></div><div class="kpi" style="background:#eff6ff;border:1px solid #bfdbfe"><div class="num" style="color:#1d4ed8">${responseRate}%</div><div style="font-size:10px;color:#2563eb;margin-top:4px">نسبة الاستجابة</div></div></div>
+    ${submittedSuppliers.length > 0 ? `<div style="margin-bottom:20px"><div class="section-title">ترتيب الموردين</div><table><thead><tr><th style="width:30px">#</th><th>المورد</th><th style="text-align:center;width:80px">البنود</th><th style="text-align:center;width:120px">التغطية</th><th style="text-align:center;width:100px">الإجمالي</th></tr></thead><tbody>${leaderRows}</tbody></table></div><div><div class="section-title">تفاصيل الأسعار بند بند</div><table><thead><tr><th>البند</th><th style="text-align:center;width:70px">الكمية</th>${headerCols}<th style="text-align:center;width:90px;background:#1e3a8a">أفضل سعر</th></tr></thead><tbody>${bodyRows}</tbody><tfoot><tr style="background:#f1f5f9;font-weight:bold;border-top:2px solid #cbd5e1"><td style="padding:10px;font-weight:700">الإجمالي الكلي</td><td></td>${totalCells}<td style="padding:10px;text-align:center;font-family:monospace;font-weight:700;color:#1d4ed8;background:#eff6ff">${minTotal > 0 ? minTotal.toFixed(3) : '—'}</td></tr></tfoot></table></div>` : '<p style="text-align:center;color:#94a3b8;padding:40px">لم يستجب أي مورد حتى الآن</p>'}
+    ${pendingSuppliers.length > 0 ? `<p style="margin-top:14px;font-size:10px;color:#94a3b8">⏳ لم يستجب بعد: ${pendingSuppliers.map(s => s.companyName).join('، ')}</p>` : ''}
+    </body></html>`;
     const win = window.open('', '_blank', 'width=1000,height=750');
     if (win) { win.document.write(html); win.document.close(); win.focus(); setTimeout(() => win.print(), 700); }
   }
 
   const supplierTotals = submittedSuppliers.map(s => ({
-    name: s.companyName,
-    total: getSupplierTotal(s),
-    covered: getItemsCovered(s),
-    isBest: s.companyName === getBestTotalSupplier(),
-  })).sort((a, b) => {
-    if (a.total > 0 && b.total > 0) return a.total - b.total;
-    if (a.total > 0) return -1;
-    return 1;
-  });
+    name: s.companyName, total: getSupplierTotal(s), covered: getItemsCovered(s), isBest: s.companyName === getBestTotalSupplier(),
+  })).sort((a, b) => { if (a.total > 0 && b.total > 0) return a.total - b.total; if (a.total > 0) return -1; return 1; });
   const maxTotal = Math.max(...supplierTotals.map(s => s.total), 1);
   const totalItems = data?.items.length ?? 0;
 
   return (
-    <div className='fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-3 overflow-auto' dir='rtl'>
-      <div className='relative w-full max-w-5xl my-6 rounded-xl bg-white shadow-2xl overflow-hidden'>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 overflow-auto" dir="rtl">
+      <div className="relative w-full max-w-5xl my-6 bg-white shadow-2xl overflow-hidden border border-slate-200" style={{ borderRadius: 6 }}>
 
-        {/* ── Header ── */}
-        <div className='flex items-center justify-between bg-[#0f2240] px-6 py-4'>
+        {/* Header */}
+        <div className="flex items-center justify-between bg-[#0f2240] px-5 py-3.5">
           <div>
-            <h2 className='text-lg font-bold text-white'>تحليل ومقارنة الأسعار</h2>
-            <p className='text-blue-200 text-xs mt-0.5 font-mono'>{rfqNo}</p>
+            <h2 className="text-sm font-bold text-white">تحليل ومقارنة الأسعار</h2>
+            <p className="text-blue-300 text-[11px] mt-0.5 font-mono">{rfqNo}</p>
           </div>
-          <button onClick={onClose} className='text-slate-300 hover:text-white p-1 rounded-lg transition-colors'>
-            <X className='h-5 w-5' />
+          <button onClick={onClose} className="text-slate-300 hover:text-white p-1 rounded transition-colors">
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className='p-6 space-y-5 overflow-auto max-h-[82vh]'>
-          {isLoading && (
-            <div className='flex items-center justify-center py-20'>
-              <Loader2 className='h-8 w-8 animate-spin text-blue-600' />
-            </div>
-          )}
-          {error && <p className='text-red-500 text-sm'>حدث خطأ في تحميل البيانات</p>}
+        <div className="p-5 space-y-5 overflow-auto max-h-[82vh]">
+          {isLoading && <div className="flex items-center justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-[#0064d9]" /></div>}
+          {error && <p className="text-red-500 text-sm">حدث خطأ في تحميل البيانات</p>}
 
           {data && (
             <>
-              {/* ── KPI Cards ── */}
-              <div className='grid grid-cols-2 sm:grid-cols-4 gap-3'>
-                <div className='bg-slate-50 border border-slate-200 rounded-xl p-4 text-center'>
-                  <p className='text-3xl font-bold text-slate-800'>{totalSuppliers}</p>
-                  <p className='text-slate-500 text-xs mt-1'>إجمالي الموردين</p>
-                </div>
-                <div className='bg-green-50 border border-green-200 rounded-xl p-4 text-center'>
-                  <p className='text-3xl font-bold text-green-700'>{submittedSuppliers.length}</p>
-                  <p className='text-green-600 text-xs mt-1'>استجابوا</p>
-                </div>
-                <div className='bg-amber-50 border border-amber-200 rounded-xl p-4 text-center'>
-                  <p className='text-3xl font-bold text-amber-600'>{pendingSuppliers.length}</p>
-                  <p className='text-amber-500 text-xs mt-1'>في الانتظار</p>
-                </div>
-                <div className='bg-blue-50 border border-blue-200 rounded-xl p-4 text-center'>
-                  <p className='text-3xl font-bold text-blue-700'>{responseRate}%</p>
-                  <p className='text-blue-500 text-xs mt-1'>نسبة الاستجابة</p>
-                </div>
+              {/* KPI Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { val: totalSuppliers,            label: "إجمالي الموردين", cls: "bg-slate-50 border-slate-200 text-slate-800" },
+                  { val: submittedSuppliers.length, label: "استجابوا",        cls: "bg-emerald-50 border-emerald-200 text-emerald-700" },
+                  { val: pendingSuppliers.length,   label: "في الانتظار",    cls: "bg-amber-50 border-amber-200 text-amber-700" },
+                  { val: `${responseRate}%`,        label: "نسبة الاستجابة", cls: "bg-blue-50 border-blue-200 text-blue-700" },
+                ].map((k, i) => (
+                  <div key={i} className={`border rounded p-3 text-center ${k.cls}`}>
+                    <p className="text-2xl font-bold">{k.val}</p>
+                    <p className="text-[11px] mt-1 opacity-80">{k.label}</p>
+                  </div>
+                ))}
               </div>
 
               {submittedSuppliers.length === 0 ? (
-                <div className='text-center py-12 text-slate-400 space-y-2'>
-                  <Clock className='h-10 w-10 mx-auto text-slate-300' />
-                  <p className='font-medium'>لم يستجب أي مورد حتى الآن</p>
-                  <p className='text-sm'>أرسل الروابط للموردين وانتظر ردودهم</p>
+                <div className="text-center py-12 text-slate-400 space-y-2">
+                  <Clock className="h-10 w-10 mx-auto text-slate-300" />
+                  <p className="font-medium text-sm">لم يستجب أي مورد حتى الآن</p>
+                  <p className="text-xs">أرسل الروابط للموردين وانتظر ردودهم</p>
                 </div>
               ) : (
                 <>
-                  {/* ── Supplier Comparison (CSS bars) ── */}
-                  <div className='bg-white border border-slate-200 rounded-xl p-5'>
-                    <h3 className='text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2'>
-                      <BarChart3 className='h-4 w-4 text-blue-600' />
-                      مقارنة الإجمالي الكلي للموردين
+                  {/* Bar chart comparison */}
+                  <div className="border border-slate-200 bg-white rounded p-4">
+                    <h3 className="text-xs font-semibold text-[#0f2240] mb-3 flex items-center gap-1.5 border-r-2 border-[#0064d9] pr-2">
+                      <BarChart3 className="h-3.5 w-3.5 text-[#0064d9]" /> مقارنة الإجمالي الكلي للموردين
                     </h3>
-                    <div className='space-y-3'>
+                    <div className="space-y-3">
                       {supplierTotals.map((sup, idx) => {
                         const barPct = sup.total > 0 ? (sup.total / maxTotal) * 100 : 0;
                         const coverage = totalItems > 0 ? Math.round((sup.covered / totalItems) * 100) : 0;
                         return (
-                          <div key={idx} className='space-y-1'>
-                            <div className='flex items-center justify-between text-sm'>
-                              <div className='flex items-center gap-2'>
-                                {sup.isBest && sup.total > 0 && (
-                                  <span className='text-xs bg-green-100 text-green-700 font-bold px-1.5 py-0.5 rounded'>★ الأفضل</span>
-                                )}
+                          <div key={idx} className="space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                              <div className="flex items-center gap-2">
+                                {sup.isBest && sup.total > 0 && <span className="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-1.5 py-0.5 rounded-sm">★ الأفضل</span>}
                                 <span className={sup.isBest && sup.total > 0 ? 'font-semibold text-slate-800' : 'text-slate-600'}>{sup.name}</span>
                               </div>
-                              <div className='flex items-center gap-3 text-xs text-slate-500'>
-                                <span className='font-mono'>{sup.covered}/{totalItems} بند</span>
-                                <span className={sup.isBest && sup.total > 0 ? 'font-bold text-green-700' : 'font-mono text-slate-700'}>
-                                  {sup.total > 0 ? sup.total.toFixed(3) : '—'}
-                                </span>
+                              <div className="flex items-center gap-3 text-[11px] text-slate-500">
+                                <span className="font-mono">{sup.covered}/{totalItems} بند</span>
+                                <span className={`font-mono ${sup.isBest && sup.total > 0 ? 'font-bold text-emerald-700' : 'text-slate-700'}`}>{sup.total > 0 ? sup.total.toFixed(3) : '—'}</span>
                               </div>
                             </div>
-                            <div className='h-2 w-full bg-slate-100 rounded-full overflow-hidden'>
-                              <div
-                                className={`h-full rounded-full transition-all ${sup.isBest && sup.total > 0 ? 'bg-green-500' : 'bg-blue-400'}`}
-                                style={{ width: `${barPct}%` }}
-                              />
+                            <div className="h-2 w-full bg-slate-100 rounded overflow-hidden">
+                              <div className={`h-full rounded transition-all ${sup.isBest && sup.total > 0 ? 'bg-emerald-500' : 'bg-[#0064d9]'}`} style={{ width: `${barPct}%` }} />
                             </div>
-                            <div className='flex items-center gap-1'>
-                              <div className='h-1 rounded-full bg-slate-200 flex-1 overflow-hidden'>
-                                <div className='h-full bg-slate-400 rounded-full' style={{ width: `${coverage}%` }} />
+                            <div className="flex items-center gap-1">
+                              <div className="h-1 rounded bg-slate-200 flex-1 overflow-hidden">
+                                <div className="h-full bg-slate-400 rounded" style={{ width: `${coverage}%` }} />
                               </div>
-                              <span className='text-xs text-slate-400 shrink-0 w-16 text-left'>تغطية {coverage}%</span>
+                              <span className="text-[10px] text-slate-400 shrink-0 w-16 text-left">تغطية {coverage}%</span>
                             </div>
                           </div>
                         );
@@ -581,44 +447,36 @@ ${pendingSuppliers.length > 0 ? `<p style="margin-top:14px;font-size:10px;color:
                     </div>
                   </div>
 
-                  {/* ── Supplier Leaderboard ── */}
-                  <div className='bg-white border border-slate-200 rounded-xl p-5'>
-                    <h3 className='text-sm font-semibold text-slate-700 mb-3'>ترتيب الموردين</h3>
-                    <table className='w-full text-sm'>
+                  {/* Leaderboard */}
+                  <div className="border border-slate-200 rounded overflow-hidden">
+                    <div className="bg-[#dce3ec] px-4 py-2 text-[11px] font-semibold text-slate-700 border-b border-slate-300">ترتيب الموردين</div>
+                    <table className="w-full text-xs text-right">
                       <thead>
-                        <tr className='border-b border-slate-200'>
-                          <th className='pb-2 text-slate-400 text-xs font-medium text-right w-6'>#</th>
-                          <th className='pb-2 text-slate-400 text-xs font-medium text-right'>المورد</th>
-                          <th className='pb-2 text-slate-400 text-xs font-medium text-center'>البنود</th>
-                          <th className='pb-2 text-slate-400 text-xs font-medium text-center'>التغطية</th>
-                          <th className='pb-2 text-slate-400 text-xs font-medium text-center'>الإجمالي</th>
+                        <tr className="bg-[#f0f4f8] border-b border-slate-200">
+                          <TH className="w-8">#</TH>
+                          <TH>المورد</TH>
+                          <TH className="text-center">البنود</TH>
+                          <TH className="text-center">التغطية</TH>
+                          <TH className="text-center">الإجمالي</TH>
                         </tr>
                       </thead>
                       <tbody>
                         {supplierTotals.map((sup, idx) => {
                           const coverage = totalItems > 0 ? Math.round((sup.covered / totalItems) * 100) : 0;
                           return (
-                            <tr key={idx} className='border-b border-slate-100 last:border-0'>
-                              <td className='py-2.5 text-slate-400 text-xs'>{idx + 1}</td>
-                              <td className='py-2.5 font-medium text-slate-800'>
-                                {sup.name}
-                                {sup.isBest && sup.total > 0 && (
-                                  <span className='mr-1.5 text-xs text-green-600'>★</span>
-                                )}
-                              </td>
-                              <td className='py-2.5 text-center text-xs text-slate-600'>{sup.covered} / {totalItems}</td>
-                              <td className='py-2.5 text-center'>
-                                <div className='flex items-center justify-center gap-2'>
-                                  <div className='w-16 bg-slate-100 rounded-full h-1.5'>
-                                    <div
-                                      className={`h-1.5 rounded-full ${coverage >= 80 ? 'bg-green-500' : coverage >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
-                                      style={{ width: `${coverage}%` }}
-                                    />
+                            <tr key={idx} className={`border-b border-slate-100 last:border-0 ${sup.isBest && sup.total > 0 ? 'bg-emerald-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                              <td className="px-3 py-2 text-slate-400 text-[10px]">{idx + 1}</td>
+                              <td className="px-3 py-2 font-medium text-slate-800">{sup.name}{sup.isBest && sup.total > 0 && <span className="mr-1.5 text-[10px] text-emerald-600">★</span>}</td>
+                              <td className="px-3 py-2 text-center text-[11px] text-slate-600 font-mono">{sup.covered} / {totalItems}</td>
+                              <td className="px-3 py-2 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  <div className="w-16 bg-slate-100 rounded h-1.5">
+                                    <div className={`h-1.5 rounded ${coverage >= 80 ? 'bg-emerald-500' : coverage >= 50 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${coverage}%` }} />
                                   </div>
-                                  <span className='text-xs text-slate-600 w-8'>{coverage}%</span>
+                                  <span className="text-[10px] text-slate-500 w-7">{coverage}%</span>
                                 </div>
                               </td>
-                              <td className={`py-2.5 text-center font-mono font-semibold text-sm ${sup.isBest && sup.total > 0 ? 'text-green-700' : 'text-slate-700'}`}>
+                              <td className={`px-3 py-2 text-center font-mono font-semibold ${sup.isBest && sup.total > 0 ? 'text-emerald-700' : 'text-slate-700'}`}>
                                 {sup.total > 0 ? sup.total.toFixed(3) : '—'}
                               </td>
                             </tr>
@@ -628,83 +486,64 @@ ${pendingSuppliers.length > 0 ? `<p style="margin-top:14px;font-size:10px;color:
                     </table>
                   </div>
 
-                  {/* ── Detailed Price Table ── */}
-                  <div>
-                    <h3 className='text-sm font-semibold text-slate-700 mb-3'>تفاصيل الأسعار بند بند</h3>
-                    <div className='overflow-auto rounded-xl border border-slate-200'>
-                      <table className='w-full text-sm text-right min-w-[600px]'>
+                  {/* Detailed price table */}
+                  <div className="border border-slate-200 rounded overflow-hidden">
+                    <div className="bg-[#dce3ec] px-4 py-2 text-[11px] font-semibold text-slate-700 border-b border-slate-300">تفاصيل الأسعار بند بند</div>
+                    <div className="overflow-auto">
+                      <table className="w-full text-xs text-right min-w-[600px]">
                         <thead>
-                          <tr className='bg-[#0f2240] text-white'>
-                            <th className='px-3 py-3 font-medium text-right sticky right-0 bg-[#0f2240] z-10 min-w-[180px]'>البند</th>
-                            <th className='px-3 py-3 font-medium text-center w-20'>الكمية</th>
-                            {submittedSuppliers.map(s => (
-                              <th key={s.id} className='px-3 py-3 font-medium text-center min-w-[120px] text-blue-100'>{s.companyName}</th>
-                            ))}
-                            <th className='px-3 py-3 font-medium text-center bg-blue-900 min-w-[100px]'>أفضل سعر</th>
+                          <tr className="bg-[#0f2240] text-white">
+                            <th className="px-3 py-2.5 font-semibold text-right sticky right-0 bg-[#0f2240] z-10 min-w-[180px] text-[11px]">البند</th>
+                            <th className="px-3 py-2.5 font-semibold text-center w-20 text-[11px]">الكمية</th>
+                            {submittedSuppliers.map(s => <th key={s.id} className="px-3 py-2.5 font-semibold text-center min-w-[120px] text-blue-100 text-[11px]">{s.companyName}</th>)}
+                            <th className="px-3 py-2.5 font-semibold text-center bg-[#1e3a8a] min-w-[100px] text-[11px]">أفضل سعر</th>
                           </tr>
                         </thead>
                         <tbody>
                           {data.items.map((item, idx) => {
                             const best = getBestPrice(item.id);
                             return (
-                              <tr key={item.id} className={`border-t ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
-                                <td className={`px-3 py-2.5 font-medium sticky right-0 z-10 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
-                                  <div className='truncate max-w-[180px]' title={item.description}>{item.description}</div>
-                                  {item.partNo && <div className='text-xs text-slate-400'>{item.partNo}</div>}
+                              <tr key={item.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                                <td className={`px-3 py-2 font-medium sticky right-0 z-10 border-l border-slate-200 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
+                                  <div className="truncate max-w-[180px]" title={item.description}>{item.description}</div>
+                                  {item.partNo && <div className="text-[10px] text-slate-400">{item.partNo}</div>}
                                 </td>
-                                <td className='px-3 py-2.5 text-center text-slate-600 font-mono text-xs'>
-                                  {item.quantity} {item.unit}
-                                </td>
+                                <td className="px-3 py-2 text-center text-slate-500 font-mono text-[11px]">{item.quantity} {item.unit}</td>
                                 {submittedSuppliers.map(s => {
                                   const price = getPrice(s, item.id);
                                   const qty = parseFloat(item.quantity) || 0;
-                                  const total = price !== null ? (price * qty).toFixed(3) : null;
                                   const isBest = price !== null && price > 0 && best !== null && price === best;
                                   return (
-                                    <td key={s.id} className={`px-3 py-2.5 text-center ${isBest ? 'bg-green-50' : ''}`}>
+                                    <td key={s.id} className={`px-3 py-2 text-center border-l border-slate-100 ${isBest ? 'bg-emerald-50' : ''}`}>
                                       {price !== null && price > 0 ? (
                                         <div>
-                                          <div className={`font-mono font-semibold text-sm ${isBest ? 'text-green-700' : 'text-slate-800'}`}>
-                                            {price.toFixed(3)}
-                                            {isBest && <span className='mr-1 text-xs text-green-500'>★</span>}
+                                          <div className={`font-mono font-semibold ${isBest ? 'text-emerald-700' : 'text-slate-800'}`}>
+                                            {price.toFixed(3)}{isBest && <span className="mr-1 text-[10px] text-emerald-500">★</span>}
                                           </div>
-                                          <div className={`text-xs font-mono ${isBest ? 'text-green-500' : 'text-slate-400'}`}>{total}</div>
+                                          <div className={`text-[10px] font-mono ${isBest ? 'text-emerald-400' : 'text-slate-400'}`}>{(price * qty).toFixed(3)}</div>
                                         </div>
-                                      ) : (
-                                        <span className='text-slate-300 text-xs'>—</span>
-                                      )}
+                                      ) : <span className="text-slate-300 text-[11px]">—</span>}
                                     </td>
                                   );
                                 })}
-                                <td className='px-3 py-2.5 text-center bg-blue-50'>
-                                  {best !== null ? (
-                                    <span className='font-mono font-bold text-blue-700'>{best.toFixed(3)}</span>
-                                  ) : (
-                                    <span className='text-slate-300 text-xs'>—</span>
-                                  )}
+                                <td className="px-3 py-2 text-center bg-blue-50 border-l border-blue-200">
+                                  {best !== null ? <span className="font-mono font-bold text-[#0064d9]">{best.toFixed(3)}</span> : <span className="text-slate-300">—</span>}
                                 </td>
                               </tr>
                             );
                           })}
                         </tbody>
                         <tfoot>
-                          <tr className='border-t-2 border-slate-300 bg-slate-100 font-bold'>
-                            <td className='px-3 py-3 sticky right-0 bg-slate-100 z-10'>الإجمالي الكلي</td>
+                          <tr className="border-t-2 border-slate-300 bg-[#f0f4f8] font-bold">
+                            <td className="px-3 py-2.5 sticky right-0 bg-[#f0f4f8] z-10 text-slate-700 text-xs">الإجمالي الكلي</td>
                             <td />
                             {submittedSuppliers.map(s => {
                               const total = getSupplierTotal(s);
                               const isBest = s.companyName === getBestTotalSupplier() && total > 0;
-                              return (
-                                <td key={s.id} className={`px-3 py-3 text-center font-mono ${isBest ? 'text-green-700 bg-green-50' : 'text-slate-700'}`}>
-                                  {total > 0 ? total.toFixed(3) : '—'}
-                                  {isBest && <span className='mr-1 text-xs'>★</span>}
-                                </td>
-                              );
+                              return <td key={s.id} className={`px-3 py-2.5 text-center font-mono text-xs ${isBest ? 'text-emerald-700 bg-emerald-50' : 'text-slate-700'}`}>{total > 0 ? total.toFixed(3) : '—'}{isBest && <span className="mr-1 text-[10px]">★</span>}</td>;
                             })}
-                            <td className='px-3 py-3 text-center bg-blue-50 font-mono text-blue-700'>
-                              {submittedSuppliers.length > 0
-                                ? (() => { const v = Math.min(...submittedSuppliers.map(s => getSupplierTotal(s)).filter(t => t > 0)); return isFinite(v) ? v.toFixed(3) : '—'; })()
-                                : '—'}
+                            <td className="px-3 py-2.5 text-center bg-blue-50 font-mono text-[#0064d9] text-xs">
+                              {submittedSuppliers.length > 0 ? (() => { const v = Math.min(...submittedSuppliers.map(s => getSupplierTotal(s)).filter(t => t > 0)); return isFinite(v) ? v.toFixed(3) : '—'; })() : '—'}
                             </td>
                           </tr>
                         </tfoot>
@@ -712,11 +551,10 @@ ${pendingSuppliers.length > 0 ? `<p style="margin-top:14px;font-size:10px;color:
                     </div>
                   </div>
 
-                  {/* Pending note */}
                   {pendingSuppliers.length > 0 && (
-                    <div className='text-xs text-slate-400 flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2'>
-                      <Clock className='h-3 w-3 text-amber-500 shrink-0' />
-                      <span>لم يستجب بعد: <span className='text-slate-500'>{pendingSuppliers.map(s => s.companyName).join('، ')}</span></span>
+                    <div className="text-[11px] text-slate-500 flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                      <Clock className="h-3 w-3 text-amber-500 shrink-0" />
+                      <span>لم يستجب بعد: <span className="text-slate-600">{pendingSuppliers.map(s => s.companyName).join('، ')}</span></span>
                     </div>
                   )}
                 </>
@@ -725,16 +563,12 @@ ${pendingSuppliers.length > 0 ? `<p style="margin-top:14px;font-size:10px;color:
           )}
         </div>
 
-        <div className='border-t px-6 py-4 flex items-center justify-between bg-slate-50'>
-          <button
-            onClick={printAnalysis}
-            disabled={!data || submittedSuppliers.length === 0}
-            className='flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
-          >
-            <FileText className='h-4 w-4' />
-            طباعة التحليل
+        <div className="border-t border-slate-200 px-5 py-3 flex items-center justify-between bg-[#f8fafc]">
+          <button onClick={printAnalysis} disabled={!data || submittedSuppliers.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 bg-white text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded">
+            <FileText className="h-3.5 w-3.5" /> طباعة التحليل
           </button>
-          <Button onClick={onClose} variant='outline'>إغلاق</Button>
+          <button onClick={onClose} className="px-4 py-1.5 border border-slate-300 bg-white text-xs text-slate-700 hover:bg-slate-50 rounded transition-colors">إغلاق</button>
         </div>
       </div>
     </div>
@@ -745,7 +579,6 @@ ${pendingSuppliers.length > 0 ? `<p style="margin-top:14px;font-size:10px;color:
 
 function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [step, setStep] = useState(1);
-  const [searchBy, setSearchBy] = useState<"quotationNo" | "customerOrderNo">("quotationNo");
   const [searchTerm, setSearchTerm] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -754,9 +587,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   const [selectedItemIds, setSelectedItemIds] = useState<Set<number>>(new Set());
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  // Global supplier selection for this single RFQ
   const [selectedSupplierIds, setSelectedSupplierIds] = useState<Set<number>>(new Set());
-  // Category filter for Step 3 supplier grid
   const [catFilter, setCatFilter] = useState<string>("all");
   const [suppliersLoaded, setSuppliersLoaded] = useState(false);
   const [notes, setNotes] = useState("");
@@ -764,12 +595,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   const [saving, setSaving] = useState(false);
   const [savedRfqs, setSavedRfqs] = useState<any[]>([]);
   const [copiedToken, setCopiedToken] = useState("");
-  const [addingSupplierForRfq, setAddingSupplierForRfq] = useState<Rfq | null>(null);
-
-  // ── Confirmed items (locked when moving from Step 2 → 3) ──
   const [confirmedItems, setConfirmedItems] = useState<RfqItem[]>([]);
-
-  // ── Send-all state ──
   const [sendAllStatus, setSendAllStatus] = useState<"idle" | "sending" | "done" | "error">("idle");
   const [sendAllResults, setSendAllResults] = useState<SendAllResult[]>([]);
 
@@ -780,11 +606,8 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
       const res = await fetch(`${API_BASE}/api/supplier-quotations/search-cq?q=${encodeURIComponent(searchTerm.trim())}`, { credentials: "include" });
       const data: any[] = await res.json();
       if (!data || data.length === 0) { setSearchError("لم يتم العثور على طلب بهذا الرقم"); return; }
-      if (data.length === 1) {
-        await handleSelectCQ(data[0].id);
-      } else {
-        setSearchResults(data);
-      }
+      if (data.length === 1) { await handleSelectCQ(data[0].id); }
+      else { setSearchResults(data); }
     } catch { setSearchError("حدث خطأ أثناء البحث"); }
     finally { setSearching(false); }
   }
@@ -814,7 +637,6 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
 
   function goToStep(n: number) {
     if (n === 3) {
-      // Lock in the selected items explicitly so handleSave never has a stale closure
       const locked = (foundCQ?.items ?? []).filter(i => selectedItemIds.has(i.id));
       setConfirmedItems(locked);
       loadSuppliers();
@@ -823,16 +645,10 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   }
 
   async function handleSave() {
-    // Use confirmedItems (set explicitly when moving Step 2→3) to avoid any closure/type issues.
-    // Fall back to recomputing from current state if somehow empty.
     const itemsToSend = confirmedItems.length > 0
       ? confirmedItems
       : (foundCQ?.items ?? []).filter(i => selectedItemIds.has(i.id));
-
-    if (itemsToSend.length === 0) {
-      alert("يجب اختيار بند واحد على الأقل من البنود");
-      return;
-    }
+    if (itemsToSend.length === 0) { alert("يجب اختيار بند واحد على الأقل من البنود"); return; }
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE}/api/supplier-quotations`, {
@@ -852,7 +668,6 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
       setSavedRfqs([rfq]);
       onSaved();
       setStep(5);
-      // Auto-trigger bulk send immediately after creation
       triggerSendAll(rfq.id);
     } catch { alert("حدث خطأ أثناء الحفظ"); }
     finally { setSaving(false); }
@@ -863,131 +678,157 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
     setSendAllResults([]);
     try {
       const res = await fetch(`${API_BASE}/api/supplier-quotations/${rfqId}/send-all`, {
-        method: "POST",
-        credentials: "include",
+        method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ baseUrl: window.location.origin }),
       });
       const data = await res.json() as any;
-      if (!res.ok) {
-        setSendAllStatus("error");
-        return;
-      }
+      if (!res.ok) { setSendAllStatus("error"); return; }
       setSendAllResults(data.results ?? []);
       setSendAllStatus("done");
-    } catch {
-      setSendAllStatus("error");
-    }
+    } catch { setSendAllStatus("error"); }
   }
 
   const selectedItems = (foundCQ?.items ?? []).filter(i => selectedItemIds.has(i.id));
-
-  // Step 3 validation: at least one supplier selected
   const step3Valid = selectedSupplierIds.size > 0;
-
-  // Total unique suppliers selected
   const totalUniqueSuppliers = selectedSupplierIds.size;
+  const STEPS = ["استيراد البنود", "اختيار البنود", "اختيار الموردين", "مراجعة وإرسال"];
 
-  const STEPS = ["استيراد البنود", "اختيار البنود", "اختيار الموردين", "إرسال الطلب"];
+  // SAP-style input class
+  const inputCls = "w-full border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-[#0064d9]/30 rounded-sm";
+  const labelCls = "block text-[11px] font-semibold text-slate-600 mb-1";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3" dir="rtl">
-      <div className="relative w-full max-w-3xl max-h-[92vh] flex flex-col rounded-xl bg-white shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between border-b bg-[#0f2240] px-6 py-4">
-          <h2 className="text-lg font-bold text-white">إرسال طلب تسعير للموردين</h2>
-          <button onClick={onClose} className="text-slate-300 hover:text-white"><X className="h-5 w-5" /></button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3" dir="rtl">
+      <div className="relative w-full max-w-3xl max-h-[93vh] flex flex-col bg-white shadow-2xl overflow-hidden border border-slate-300" style={{ borderRadius: 4 }}>
+
+        {/* SAP Modal Header */}
+        <div className="flex items-center justify-between bg-[#0f2240] px-5 py-3">
+          <div className="flex items-center gap-2">
+            <Send className="h-4 w-4 text-blue-300" />
+            <span className="text-sm font-bold text-white">إرسال طلب تسعير للموردين</span>
+          </div>
+          <button onClick={onClose} className="text-slate-300 hover:text-white p-1 rounded transition-colors">
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
+        {/* Step progress bar — SAP style */}
         {step <= 4 && (
-          <div className="flex border-b bg-slate-50 px-6 py-3 gap-0">
+          <div className="flex items-stretch border-b border-slate-200 bg-[#f0f4f8]">
             {STEPS.map((label, idx) => {
               const n = idx + 1;
               const active = step === n;
               const done = step > n;
               return (
-                <div key={n} className="flex items-center flex-1 min-w-0">
-                  <div className={`flex items-center gap-2 text-xs font-medium truncate ${active ? "text-blue-700" : done ? "text-green-600" : "text-slate-400"}`}>
-                    <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${active ? "bg-blue-700 text-white" : done ? "bg-green-500 text-white" : "bg-slate-200 text-slate-500"}`}>
-                      {done ? "✓" : n}
+                <React.Fragment key={n}>
+                  <div className={`flex items-center gap-2 px-4 py-2.5 flex-1 min-w-0 relative
+                    ${active ? "bg-white border-b-2 border-[#0064d9]" : done ? "bg-[#f0f4f8]" : "bg-[#f0f4f8]"}`}>
+                    <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold
+                      ${active ? "bg-[#0064d9] text-white" : done ? "bg-emerald-500 text-white" : "bg-slate-300 text-slate-500"}`}>
+                      {done ? <Check className="h-3 w-3" /> : n}
                     </span>
-                    <span className="hidden sm:inline truncate">{label}</span>
+                    <span className={`text-[11px] font-medium truncate hidden sm:block
+                      ${active ? "text-[#0064d9]" : done ? "text-emerald-600" : "text-slate-400"}`}>
+                      {label}
+                    </span>
                   </div>
-                  {idx < STEPS.length - 1 && <div className="flex-1 h-px bg-slate-200 mx-2 shrink-0 min-w-2" />}
-                </div>
+                  {idx < STEPS.length - 1 && (
+                    <div className="flex items-center text-slate-300 shrink-0">
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </div>
+                  )}
+                </React.Fragment>
               );
             })}
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-white">
 
-          {/* ── STEP 1 ── */}
+          {/* ── STEP 1: Import CQ ── */}
           {step === 1 && (
             <div className="space-y-4">
-              <p className="text-sm text-slate-600">ابحث عن طلب تسعير العميل برقم الطلب.</p>
-              <div className="flex gap-2">
-                <input
-                  className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                  placeholder="مثال: CQ-20260620-1234"
-                  value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleSearch()} dir="ltr"
-                />
-                <Button onClick={handleSearch} disabled={searching || !searchTerm.trim()} className="bg-[#0064d9] hover:bg-[#0854a0] shrink-0">
-                  <Search className="h-4 w-4 ml-1" /> بحث
-                </Button>
-              </div>
-              {searchError && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{searchError}</p>}
+              <p className="text-[11px] text-slate-500 border-r-2 border-[#0064d9] pr-2">ابحث عن طلب تسعير العميل برقم الطلب أو رقم أمر الشراء</p>
 
-              {/* ── نتائج متعددة ── */}
+              <div className="flex gap-2">
+                <div className="flex-1 relative">
+                  <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                  <input
+                    className={`${inputCls} pr-8`}
+                    placeholder="مثال: CQ-20260620-1234"
+                    value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleSearch()} dir="ltr"
+                  />
+                </div>
+                <button onClick={handleSearch} disabled={searching || !searchTerm.trim()}
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-[#0064d9] hover:bg-[#0054b8] text-white text-xs font-semibold disabled:opacity-50 transition-colors rounded-sm">
+                  {searching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                  بحث
+                </button>
+              </div>
+
+              {searchError && (
+                <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded-sm">
+                  <X className="h-3.5 w-3.5 shrink-0" /> {searchError}
+                </div>
+              )}
+
+              {/* Multiple results */}
               {searchResults.length > 1 && (
-                <div className="space-y-2">
-                  <p className="text-sm text-slate-600 font-medium">تم العثور على {searchResults.length} نتيجة — اختر الطلب المناسب:</p>
-                  <div className="overflow-auto max-h-64 rounded-lg border border-slate-200 divide-y">
-                    {searchResults.map((r) => (
-                      <button
-                        key={r.id}
-                        onClick={() => handleSelectCQ(r.id)}
-                        className="w-full text-right px-4 py-3 hover:bg-blue-50 transition-colors flex justify-between items-center gap-3 text-sm"
-                      >
+                <div className="border border-slate-200 rounded-sm overflow-hidden">
+                  <div className="bg-[#dce3ec] px-3 py-2 text-[11px] font-semibold text-slate-600 border-b border-slate-300">
+                    تم العثور على {searchResults.length} نتيجة — اختر الطلب المناسب
+                  </div>
+                  <div className="divide-y divide-slate-100 max-h-48 overflow-auto">
+                    {searchResults.map(r => (
+                      <button key={r.id} onClick={() => handleSelectCQ(r.id)}
+                        className="w-full text-right px-4 py-2.5 hover:bg-blue-50 transition-colors flex justify-between items-center gap-3">
                         <div className="flex flex-col gap-0.5">
-                          <span className="font-semibold text-blue-700 font-mono">{r.quotationNo}</span>
-                          <span className="text-slate-500 text-xs">{r.customerName || "—"}</span>
+                          <span className="text-xs font-semibold text-[#0064d9] font-mono">{r.quotationNo}</span>
+                          <span className="text-[11px] text-slate-500">{r.customerName || "—"}</span>
                         </div>
-                        <div className="text-xs text-slate-400 shrink-0">{r.requestDate || ""}</div>
+                        <span className="text-[10px] text-slate-400 shrink-0">{r.requestDate || ""}</span>
                       </button>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* ── طلب محدد ── */}
+              {/* Found CQ */}
               {foundCQ && (
-                <div className="rounded-lg border border-green-200 bg-green-50 p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-green-700 font-semibold text-sm"><CheckSquare className="h-4 w-4" /> تم العثور على الطلب</div>
-                    <button onClick={() => { setFoundCQ(null); setSearchResults([]); }} className="text-xs text-slate-400 hover:text-slate-600">تغيير</button>
+                <div className="border border-emerald-300 bg-emerald-50 rounded-sm overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2 bg-emerald-100 border-b border-emerald-200">
+                    <div className="flex items-center gap-1.5 text-emerald-700 font-semibold text-[11px]">
+                      <Check className="h-3.5 w-3.5" /> تم العثور على الطلب
+                    </div>
+                    <button onClick={() => { setFoundCQ(null); setSearchResults([]); }}
+                      className="text-[10px] text-slate-500 hover:text-red-600 border border-slate-300 bg-white px-2 py-0.5 rounded-sm">تغيير</button>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div><span className="text-slate-500">رقم الطلب:</span> <span className="font-medium font-mono">{foundCQ.quotationNo}</span></div>
-                    <div><span className="text-slate-500">العميل:</span> <span className="font-medium">{foundCQ.customerName}</span></div>
-                    <div><span className="text-slate-500">رقم أمر الشراء:</span> <span className="font-medium">{foundCQ.customerOrderNo || "—"}</span></div>
-                    <div><span className="text-slate-500">عدد البنود:</span> <span className="font-medium">{foundCQ.items.length} بند</span></div>
+                  <div className="p-3 grid grid-cols-2 gap-2 text-[11px]">
+                    <div><span className="text-slate-400">رقم الطلب: </span><span className="font-semibold font-mono text-[#0f2240]">{foundCQ.quotationNo}</span></div>
+                    <div><span className="text-slate-400">العميل: </span><span className="font-semibold">{foundCQ.customerName}</span></div>
+                    <div><span className="text-slate-400">رقم أمر الشراء: </span><span className="font-medium">{foundCQ.customerOrderNo || "—"}</span></div>
+                    <div><span className="text-slate-400">عدد البنود: </span><span className="font-semibold text-[#0064d9]">{foundCQ.items.length} بند</span></div>
                   </div>
-                  <div className="overflow-auto max-h-48 rounded border">
-                    <table className="w-full text-xs text-right">
-                      <thead className="bg-slate-100"><tr>
-                        <th className="px-3 py-2 font-medium text-slate-500">#</th>
-                        <th className="px-3 py-2 font-medium text-slate-500">الوصف</th>
-                        <th className="px-3 py-2 font-medium text-slate-500">رقم القطعة</th>
-                        <th className="px-3 py-2 font-medium text-slate-500">الكمية</th>
-                      </tr></thead>
+                  <div className="mx-3 mb-3 border border-slate-200 rounded-sm overflow-hidden">
+                    <table className="w-full text-[11px] text-right">
+                      <thead className="bg-[#dce3ec] border-b border-slate-300">
+                        <tr>
+                          <TH className="w-8">#</TH>
+                          <TH>الوصف</TH>
+                          <TH>رقم القطعة</TH>
+                          <TH>الكمية</TH>
+                        </tr>
+                      </thead>
                       <tbody>
                         {foundCQ.items.map((item, idx) => (
-                          <tr key={item.id} className="border-t">
+                          <tr key={item.id} className={`border-b border-slate-100 last:border-0 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
                             <td className="px-3 py-1.5 text-slate-400">{idx + 1}</td>
-                            <td className="px-3 py-1.5">{item.description}</td>
+                            <td className="px-3 py-1.5 font-medium">{item.description}</td>
                             <td className="px-3 py-1.5 text-slate-500">{item.partNo || "—"}</td>
-                            <td className="px-3 py-1.5">{item.quantity} {item.unit}</td>
+                            <td className="px-3 py-1.5 font-mono">{item.quantity} {item.unit}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -998,320 +839,324 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
             </div>
           )}
 
-          {/* ── STEP 2 ── */}
+          {/* ── STEP 2: Select Items ── */}
           {step === 2 && foundCQ && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-600">اختر البنود التي تريد إرسالها للموردين</p>
-                <div className="flex gap-2">
-                  <button className="text-xs text-blue-600 hover:underline" onClick={() => setSelectedItemIds(new Set(foundCQ.items.map(i => i.id)))}>تحديد الكل</button>
+                <p className="text-[11px] text-slate-500 border-r-2 border-[#0064d9] pr-2">اختر البنود التي تريد إرسالها للموردين</p>
+                <div className="flex items-center gap-2 text-[11px]">
+                  <button className="text-[#0064d9] hover:underline font-medium" onClick={() => setSelectedItemIds(new Set(foundCQ.items.map(i => i.id)))}>تحديد الكل</button>
                   <span className="text-slate-300">|</span>
-                  <button className="text-xs text-blue-600 hover:underline" onClick={() => setSelectedItemIds(new Set())}>إلغاء الكل</button>
+                  <button className="text-slate-500 hover:underline" onClick={() => setSelectedItemIds(new Set())}>إلغاء الكل</button>
                 </div>
               </div>
-              <div className="rounded-lg border overflow-hidden">
-                <table className="w-full text-sm text-right">
-                  <thead className="bg-slate-50 border-b"><tr>
-                    <th className="w-10 px-3 py-2" />
-                    <th className="px-3 py-2 font-medium text-slate-500">الوصف</th>
-                    <th className="px-3 py-2 font-medium text-slate-500">كود البند</th>
-                    <th className="px-3 py-2 font-medium text-slate-500">رقم القطعة</th>
-                    <th className="px-3 py-2 font-medium text-slate-500">الكمية</th>
-                    <th className="px-3 py-2 font-medium text-slate-500">الوحدة</th>
-                  </tr></thead>
+              <div className="border border-slate-200 rounded-sm overflow-hidden">
+                <table className="w-full text-[11px] text-right">
+                  <thead className="bg-[#dce3ec] border-b border-slate-300">
+                    <tr>
+                      <TH className="w-10 text-center">✓</TH>
+                      <TH>الوصف</TH>
+                      <TH>كود البند</TH>
+                      <TH>رقم القطعة</TH>
+                      <TH className="text-center">الكمية</TH>
+                      <TH className="text-center">الوحدة</TH>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {foundCQ.items.map(item => {
+                    {foundCQ.items.map((item, idx) => {
                       const checked = selectedItemIds.has(item.id);
                       return (
-                        <tr key={item.id} className={`border-t cursor-pointer ${checked ? "bg-blue-50" : "hover:bg-slate-50"}`}
+                        <tr key={item.id}
+                          className={`border-b border-slate-100 last:border-0 cursor-pointer select-none transition-colors
+                            ${checked ? "bg-blue-50" : idx % 2 === 0 ? "bg-white hover:bg-slate-50" : "bg-slate-50/30 hover:bg-slate-50"}`}
                           onClick={() => { const s = new Set(selectedItemIds); checked ? s.delete(item.id) : s.add(item.id); setSelectedItemIds(s); }}>
-                          <td className="px-3 py-2 text-center">{checked ? <CheckSquare className="h-4 w-4 text-blue-600 inline" /> : <Square className="h-4 w-4 text-slate-400 inline" />}</td>
-                          <td className="px-3 py-2 font-medium">{item.description}</td>
-                          <td className="px-3 py-2 text-slate-500">{item.customerItemCode || "—"}</td>
-                          <td className="px-3 py-2 text-slate-500">{item.partNo || "—"}</td>
-                          <td className="px-3 py-2">{item.quantity}</td>
-                          <td className="px-3 py-2 text-slate-500">{item.unit || "—"}</td>
+                          <td className="px-3 py-1.5 text-center">
+                            <div className={`inline-flex h-4 w-4 items-center justify-center rounded-sm border-2 transition-colors ${checked ? "bg-[#0064d9] border-[#0064d9]" : "border-slate-300"}`}>
+                              {checked && <Check className="h-2.5 w-2.5 text-white" />}
+                            </div>
+                          </td>
+                          <td className="px-3 py-1.5 font-medium">{item.description}</td>
+                          <td className="px-3 py-1.5 text-slate-500 font-mono">{item.customerItemCode || "—"}</td>
+                          <td className="px-3 py-1.5 text-slate-500 font-mono">{item.partNo || "—"}</td>
+                          <td className="px-3 py-1.5 text-center font-mono">{item.quantity}</td>
+                          <td className="px-3 py-1.5 text-center text-slate-500">{item.unit || "—"}</td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
-              <p className="text-xs text-slate-500">تم تحديد {selectedItemIds.size} من {foundCQ.items.length} بند</p>
+              <p className="text-[11px] text-slate-400">تم تحديد <span className="font-semibold text-[#0064d9]">{selectedItemIds.size}</span> من {foundCQ.items.length} بند</p>
             </div>
           )}
 
-          {/* ── STEP 3 ── global supplier selection ── */}
+          {/* ── STEP 3: Select Suppliers ── */}
           {step === 3 && (
-            <div className="space-y-4">
-              <p className="text-sm text-slate-600">
-                اختر الموردين الذين سيُرسَل إليهم هذا الطلب — سيصل لكل مورد رابط خاص للرد على <strong>جميع البنود ({selectedItems.length} بند)</strong>
+            <div className="space-y-3">
+              <p className="text-[11px] text-slate-500 border-r-2 border-[#0064d9] pr-2">
+                اختر الموردين — سيصل لكل مورد رابط خاص للرد على جميع البنود ({selectedItems.length} بند)
               </p>
 
-              {/* Category filter + select-all row */}
+              {/* Category filter pills */}
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs text-slate-400 shrink-0">التصنيف:</span>
-                <button
-                  onClick={() => setCatFilter("all")}
-                  className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${catFilter === "all" ? "bg-[#0064d9] text-white border-[#0064d9]" : "border-slate-300 text-slate-600 hover:border-blue-400"}`}
-                >الكل</button>
-                {categories.map(cat => (
-                  <button
-                    key={cat.id}
-                    onClick={() => setCatFilter(String(cat.id))}
-                    className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${catFilter === String(cat.id) ? "bg-[#0064d9] text-white border-[#0064d9]" : "border-slate-300 text-slate-600 hover:border-blue-400"}`}
-                  >{cat.name}</button>
+                <span className="text-[10px] text-slate-400 shrink-0">التصنيف:</span>
+                {[{ id: "all", name: "الكل" }, ...categories.map(c => ({ id: String(c.id), name: c.name }))].map(cat => (
+                  <button key={cat.id} onClick={() => setCatFilter(cat.id)}
+                    className={`px-2.5 py-0.5 rounded-sm text-[10px] font-semibold border transition-all
+                      ${catFilter === cat.id ? "bg-[#0f2240] text-white border-[#0f2240]" : "border-slate-300 text-slate-600 bg-white hover:border-[#0064d9] hover:text-[#0064d9]"}`}>
+                    {cat.name}
+                  </button>
                 ))}
                 {(() => {
                   const filtered = catFilter === "all" ? suppliers : suppliers.filter(s => s.categories.some(c => String(c.id) === catFilter));
                   const filteredIds = filtered.map(s => s.id);
                   const allSelected = filteredIds.length > 0 && filteredIds.every(id => selectedSupplierIds.has(id));
                   return filtered.length > 0 ? (
-                    <button
-                      onClick={() => {
-                        const next = new Set(selectedSupplierIds);
-                        if (allSelected) { filteredIds.forEach(id => next.delete(id)); }
-                        else { filteredIds.forEach(id => next.add(id)); }
-                        setSelectedSupplierIds(next);
-                      }}
-                      className={`mr-auto px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors ${
-                        allSelected
-                          ? "bg-red-50 text-red-600 border-red-300 hover:bg-red-100"
-                          : "bg-green-50 text-green-700 border-green-300 hover:bg-green-100"
-                      }`}
-                    >
+                    <button onClick={() => {
+                      const next = new Set(selectedSupplierIds);
+                      if (allSelected) filteredIds.forEach(id => next.delete(id));
+                      else filteredIds.forEach(id => next.add(id));
+                      setSelectedSupplierIds(next);
+                    }}
+                      className={`mr-auto px-2.5 py-0.5 rounded-sm text-[10px] font-semibold border transition-colors
+                        ${allSelected ? "bg-red-50 text-red-600 border-red-300" : "bg-emerald-50 text-emerald-700 border-emerald-300"}`}>
                       {allSelected ? "إلغاء تحديد الكل" : `تحديد الكل (${filtered.length})`}
                     </button>
                   ) : null;
                 })()}
               </div>
 
-              {/* Suppliers grid */}
+              {/* Suppliers list — SAP dense table style */}
               {(() => {
                 const filtered = catFilter === "all" ? suppliers : suppliers.filter(s => s.categories.some(c => String(c.id) === catFilter));
                 return filtered.length === 0 ? (
                   <p className="text-xs text-slate-400 py-2">لا يوجد موردون في هذا التصنيف</p>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
-                    {filtered.map(sup => {
-                      const checked = selectedSupplierIds.has(sup.id);
-                      return (
-                        <button
-                          key={sup.id}
-                          onClick={() => {
-                            const next = new Set(selectedSupplierIds);
-                            checked ? next.delete(sup.id) : next.add(sup.id);
-                            setSelectedSupplierIds(next);
-                          }}
-                          className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm text-right transition-colors ${checked ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-700 border-slate-200 hover:border-blue-300"}`}
-                        >
-                          {checked ? <CheckSquare className="h-4 w-4 shrink-0" /> : <Square className="h-4 w-4 shrink-0 text-slate-400" />}
-                          <span className="truncate font-medium">{sup.companyName}</span>
-                        </button>
-                      );
-                    })}
+                  <div className="border border-slate-200 rounded-sm overflow-hidden">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x-0 max-h-72 overflow-auto">
+                      {filtered.map((sup, idx) => {
+                        const checked = selectedSupplierIds.has(sup.id);
+                        return (
+                          <div key={sup.id}
+                            onClick={() => { const next = new Set(selectedSupplierIds); checked ? next.delete(sup.id) : next.add(sup.id); setSelectedSupplierIds(next); }}
+                            className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer select-none transition-colors border-b border-slate-100 last:border-0
+                              ${checked ? "bg-[#0064d9]/8 border-l-2 border-l-[#0064d9]" : idx % 2 === 0 ? "bg-white hover:bg-slate-50" : "bg-slate-50/30 hover:bg-slate-50"}`}>
+                            <div className={`shrink-0 h-4 w-4 rounded-sm border-2 flex items-center justify-center transition-colors
+                              ${checked ? "bg-[#0064d9] border-[#0064d9]" : "border-slate-300"}`}>
+                              {checked && <Check className="h-2.5 w-2.5 text-white" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-xs font-medium truncate ${checked ? "text-[#0064d9]" : "text-slate-700"}`}>{sup.companyName}</p>
+                              {sup.categories.length > 0 && (
+                                <p className="text-[10px] text-slate-400 truncate">{sup.categories.map(c => c.name).join(" · ")}</p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               })()}
 
-              <p className="text-xs text-slate-500">
+              <p className="text-[11px] text-slate-400">
                 {selectedSupplierIds.size > 0
-                  ? `تم اختيار ${selectedSupplierIds.size} مورد — سيُنشأ طلب تسعير واحد يُرسل لجميعهم`
+                  ? <><span className="font-semibold text-[#0064d9]">{selectedSupplierIds.size}</span> مورد محدد — سيُنشأ طلب تسعير واحد يُرسل لجميعهم</>
                   : "لم يتم اختيار أي مورد بعد"}
               </p>
             </div>
           )}
 
-          {/* ── STEP 4 ── */}
+          {/* ── STEP 4: Review & Send ── */}
           {step === 4 && (
             <div className="space-y-4">
-              <div className="rounded-lg bg-slate-50 border p-4 space-y-3 text-sm">
-                <div className="grid grid-cols-2 gap-4">
-                  <div><span className="text-slate-500">البنود:</span> <span className="font-bold text-blue-700">{selectedItems.length} بند</span></div>
-                  <div><span className="text-slate-500">الموردون:</span> <span className="font-bold text-blue-700">{totalUniqueSuppliers} مورد</span></div>
-                  <div className="col-span-2"><span className="text-slate-500">طلب تسعير العميل:</span> <span className="font-medium">{foundCQ?.quotationNo || "—"}</span></div>
+              {/* Summary panel */}
+              <div className="border border-slate-200 rounded-sm overflow-hidden">
+                <div className="bg-[#dce3ec] px-3 py-2 text-[11px] font-semibold text-slate-700 border-b border-slate-300">ملخص الطلب</div>
+                <div className="p-3 grid grid-cols-2 gap-2 text-[11px] bg-[#f8fafc]">
+                  <div><span className="text-slate-400">طلب تسعير العميل: </span><span className="font-semibold font-mono text-[#0064d9]">{foundCQ?.quotationNo || "—"}</span></div>
+                  <div><span className="text-slate-400">عدد البنود: </span><span className="font-semibold text-[#0064d9]">{selectedItems.length} بند</span></div>
+                  <div><span className="text-slate-400">رقم أمر الشراء: </span><span className="font-medium">{foundCQ?.customerOrderNo || "—"}</span></div>
+                  <div><span className="text-slate-400">عدد الموردين: </span><span className="font-semibold text-[#0064d9]">{totalUniqueSuppliers} مورد</span></div>
                 </div>
-                {/* Items */}
-                <div className="border-t pt-2 space-y-1">
-                  <p className="text-xs font-semibold text-slate-600 mb-1">البنود</p>
-                  {selectedItems.map(item => (
-                    <div key={item.id} className="flex items-center gap-2 text-xs">
-                      <span className="text-slate-400">•</span>
-                      <span className="text-slate-700 flex-1 truncate">{item.description}</span>
-                      <span className="text-slate-400">{item.quantity} {item.unit}</span>
-                    </div>
-                  ))}
+
+                {/* Items mini-table */}
+                <div className="border-t border-slate-200 overflow-auto max-h-32">
+                  <table className="w-full text-[11px] text-right">
+                    <thead className="bg-[#f0f4f8] border-b border-slate-200 sticky top-0">
+                      <tr>
+                        <TH className="w-7">#</TH>
+                        <TH>البند</TH>
+                        <TH className="text-center">الكمية</TH>
+                        <TH className="text-center">الوحدة</TH>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedItems.map((item, idx) => (
+                        <tr key={item.id} className={`border-b border-slate-100 last:border-0 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
+                          <td className="px-3 py-1 text-slate-400">{idx + 1}</td>
+                          <td className="px-3 py-1 font-medium truncate max-w-[200px]">{item.description}</td>
+                          <td className="px-3 py-1 text-center font-mono">{item.quantity}</td>
+                          <td className="px-3 py-1 text-center text-slate-500">{item.unit || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                {/* Suppliers */}
-                <div className="border-t pt-2 space-y-1">
-                  <p className="text-xs font-semibold text-slate-600 mb-1">الموردون</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {[...selectedSupplierIds].map(sid => {
-                      const sup = suppliers.find(s => s.id === sid);
-                      return sup ? (
-                        <span key={sid} className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">{sup.companyName}</span>
-                      ) : null;
-                    })}
-                  </div>
+
+                {/* Suppliers pills */}
+                <div className="border-t border-slate-200 p-3 flex flex-wrap gap-1.5">
+                  {[...selectedSupplierIds].map(sid => {
+                    const sup = suppliers.find(s => s.id === sid);
+                    return sup ? (
+                      <span key={sid} className="px-2 py-0.5 text-[10px] font-semibold bg-[#0064d9]/10 text-[#0064d9] border border-[#0064d9]/20 rounded-sm">{sup.companyName}</span>
+                    ) : null;
+                  })}
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">تاريخ إغلاق الطلب <span className="text-xs font-normal text-slate-400">(آخر موعد لتسعير الموردين)</span></label>
-                <input type="date" value={requestDate} onChange={e => setRequestDate(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" dir="ltr" />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">ملاحظات (اختياري)</label>
-                <textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)} placeholder="أي ملاحظات إضافية..." className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none resize-none" />
+
+              {/* Date + Notes */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>تاريخ إغلاق الطلب <span className="text-slate-400 font-normal">(آخر موعد للتسعير)</span></label>
+                  <input type="date" value={requestDate} onChange={e => setRequestDate(e.target.value)} className={inputCls} dir="ltr" />
+                </div>
+                <div>
+                  <label className={labelCls}>ملاحظات <span className="text-slate-400 font-normal">(اختياري)</span></label>
+                  <input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="أي ملاحظات إضافية..." className={inputCls} />
+                </div>
               </div>
             </div>
           )}
 
-          {/* ── STEP 5: Success + Auto-Send ── */}
+          {/* ── STEP 5: Result ── */}
           {step === 5 && savedRfqs.length > 0 && (() => {
             const rfq = savedRfqs[0];
             const isSending = sendAllStatus === "sending";
-            const isDone = sendAllStatus === "done";
-            const isError = sendAllStatus === "error";
-
-            // Map results by supplierId for quick lookup
-            const resultMap = new Map<number, SendAllResult>(
-              sendAllResults.map(r => [r.supplierId, r])
-            );
+            const isDone    = sendAllStatus === "done";
+            const isError   = sendAllStatus === "error";
+            const resultMap = new Map<number, SendAllResult>(sendAllResults.map(r => [r.supplierId, r]));
 
             return (
               <div className="space-y-4">
-                {/* Creation success banner */}
-                <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center">
-                  <div className="text-2xl mb-2">✅</div>
-                  <p className="font-bold text-green-700">تم إنشاء طلب التسعير بنجاح</p>
-                  <p className="text-sm text-green-600 mt-1">
-                    <span className="font-mono font-semibold">{rfq.rfqNo}</span> — {rfq.items?.length} بند · {rfq.suppliers?.length} مورد
-                  </p>
+                {/* Success banner */}
+                <div className="border border-emerald-300 bg-emerald-50 rounded-sm p-3 flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                    <Check className="h-4 w-4 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-emerald-800">تم إنشاء طلب التسعير بنجاح</p>
+                    <p className="text-[11px] text-emerald-600 font-mono mt-0.5">{rfq.rfqNo} — {rfq.items?.length} بند · {rfq.suppliers?.length} مورد</p>
+                  </div>
                 </div>
 
-                {/* Send-all status banner */}
+                {/* Send status banner */}
                 {isSending && (
-                  <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
-                    <Loader2 className="h-5 w-5 animate-spin text-blue-600 shrink-0" />
+                  <div className="border border-blue-200 bg-blue-50 rounded-sm p-3 flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-[#0064d9] shrink-0" />
                     <div>
-                      <p className="font-semibold text-blue-800 text-sm">جاري الإرسال التلقائي...</p>
-                      <p className="text-xs text-blue-600">يتم إرسال طلبات التسعير عبر واتساب وإيميل لجميع الموردين</p>
+                      <p className="text-xs font-semibold text-[#0064d9]">جاري الإرسال التلقائي لجميع الموردين...</p>
+                      <p className="text-[10px] text-blue-500">واتساب + إيميل</p>
                     </div>
                   </div>
                 )}
-
                 {isDone && (
-                  <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
-                    <Check className="h-5 w-5 text-green-600 shrink-0" />
-                    <div>
-                      <p className="font-semibold text-green-800 text-sm">
-                        تم الإرسال التلقائي إلى {sendAllResults.filter(r => r.sentChannels.length > 0).length} من {sendAllResults.length} مورد
-                      </p>
-                      <p className="text-xs text-green-600">تحقق من تفاصيل كل مورد أدناه</p>
-                    </div>
+                  <div className="border border-emerald-200 bg-emerald-50 rounded-sm p-3 flex items-center gap-2">
+                    <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <p className="text-xs font-semibold text-emerald-800">
+                      تم الإرسال إلى {sendAllResults.filter(r => r.sentChannels.length > 0).length} من {sendAllResults.length} مورد
+                    </p>
                   </div>
                 )}
-
                 {isError && (
-                  <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-                    <X className="h-5 w-5 text-red-500 shrink-0" />
+                  <div className="border border-red-200 bg-red-50 rounded-sm p-3 flex items-center gap-2">
+                    <X className="h-4 w-4 text-red-500 shrink-0" />
                     <div>
-                      <p className="font-semibold text-red-700 text-sm">حدث خطأ في الإرسال التلقائي</p>
-                      <p className="text-xs text-red-500">يمكنك الإرسال يدوياً من خلال الأزرار أدناه</p>
+                      <p className="text-xs font-semibold text-red-700">حدث خطأ في الإرسال التلقائي</p>
+                      <p className="text-[10px] text-red-500">يمكنك الإرسال يدوياً من خلال الأزرار أدناه</p>
                     </div>
                   </div>
                 )}
 
-                {/* Per-supplier cards */}
-                <p className="text-sm font-semibold text-slate-700">تفاصيل الإرسال لكل مورد:</p>
-                <div className="space-y-3">
-                  {(rfq.suppliers ?? []).map((sup: RfqSupplier) => {
+                {/* Per-supplier table */}
+                <div className="text-[11px] font-semibold text-slate-600 border-r-2 border-[#0064d9] pr-2">تفاصيل الإرسال لكل مورد</div>
+                <div className="border border-slate-200 rounded-sm overflow-hidden">
+                  {(rfq.suppliers ?? []).map((sup: RfqSupplier, idx: number) => {
                     const result = resultMap.get(sup.supplierId);
                     const rfqLinkToUse = result?.rfqLink ?? getRfqLink(sup.token);
 
                     return (
-                      <div key={sup.token} className="rounded-lg border border-slate-200 bg-white overflow-hidden">
-                        {/* Header row */}
-                        <div className="flex items-center justify-between px-4 py-3">
-                          <p className="font-semibold text-slate-800">{sup.companyName}</p>
-                          {/* Sent-via badges */}
-                          <div className="flex gap-1.5">
+                      <div key={sup.token} className={`border-b border-slate-200 last:border-0 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
+                        {/* Supplier row */}
+                        <div className="flex items-center gap-2 px-3 py-2.5 flex-wrap">
+                          <span className="text-xs font-semibold text-slate-800 flex-1 min-w-0 truncate">{sup.companyName}</span>
+                          <div className="flex items-center gap-1.5 flex-wrap shrink-0">
                             {isSending && (
-                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
-                                <Loader2 className="h-3 w-3 animate-spin" /> جاري الإرسال...
+                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-sm bg-blue-100 text-blue-700 text-[10px] font-semibold border border-blue-200">
+                                <Loader2 className="h-2.5 w-2.5 animate-spin" /> إرسال...
                               </span>
                             )}
                             {result?.whatsappSent && (
-                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium">
-                                <Check className="h-3 w-3" /> واتساب ✓
+                              <span className="flex items-center gap-0.5 px-2 py-0.5 rounded-sm bg-emerald-100 text-emerald-700 text-[10px] font-semibold border border-emerald-200">
+                                <Check className="h-2.5 w-2.5" /> واتساب
                               </span>
                             )}
                             {result?.emailSent && (
-                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
-                                <Check className="h-3 w-3" /> إيميل ✓
+                              <span className="flex items-center gap-0.5 px-2 py-0.5 rounded-sm bg-blue-100 text-blue-700 text-[10px] font-semibold border border-blue-200">
+                                <Check className="h-2.5 w-2.5" /> إيميل
                               </span>
                             )}
                             {result && result.sentChannels.length === 0 && !result.whatsappFallbackLink && (
-                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-medium">
-                                <Clock className="h-3 w-3" /> لم يُرسل تلقائياً
+                              <span className="flex items-center gap-0.5 px-2 py-0.5 rounded-sm bg-amber-100 text-amber-700 text-[10px] font-semibold border border-amber-200">
+                                <Clock className="h-2.5 w-2.5" /> لم يُرسل
                               </span>
                             )}
                           </div>
+                          {/* Action buttons */}
+                          <div className="flex gap-1 shrink-0">
+                            <button className="flex items-center gap-0.5 px-2 py-0.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[10px] rounded-sm transition-colors"
+                              onClick={() => printRfqForSupplier(rfq.rfqNo, rfq.requestDate, rfq.sourceQuotationNo, rfq.customerOrderNo, rfq.notes, sup, rfq.items, sup?.token)}>
+                              <FileText className="h-3 w-3" /> PDF
+                            </button>
+                            <button className="flex items-center gap-0.5 px-2 py-0.5 border border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-700 text-[10px] rounded-sm transition-colors"
+                              onClick={() => sendWhatsApp(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup?.token)}>
+                              <MessageSquare className="h-3 w-3" /> واتساب
+                            </button>
+                            <button className="flex items-center gap-0.5 px-2 py-0.5 border border-orange-200 bg-white hover:bg-orange-50 text-orange-700 text-[10px] rounded-sm transition-colors"
+                              onClick={() => openEmail(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup?.token)}>
+                              <Mail className="h-3 w-3" /> إيميل
+                            </button>
+                          </div>
                         </div>
 
-                        {/* RFQ link row */}
+                        {/* RFQ link */}
                         {sup.token && (
-                          <div className="flex items-center gap-2 border-t bg-slate-50 px-4 py-2">
-                            <LinkIcon className="h-3 w-3 shrink-0 text-blue-500" />
-                            <span className="text-xs text-slate-400 font-mono truncate flex-1">{rfqLinkToUse}</span>
-                            <button
-                              onClick={() => copyTokenLink(sup.token, setCopiedToken)}
-                              className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-200 hover:bg-blue-600 hover:text-white text-xs text-slate-600 shrink-0 transition-colors"
-                            >
-                              {copiedToken === sup.token ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
-                              {copiedToken === sup.token ? "تم" : "نسخ"}
+                          <div className="flex items-center gap-2 border-t border-slate-100 bg-[#f8fafc] px-3 py-1.5">
+                            <LinkIcon className="h-3 w-3 shrink-0 text-[#0064d9]" />
+                            <span className="text-[10px] text-slate-400 font-mono truncate flex-1">{rfqLinkToUse}</span>
+                            <button onClick={() => copyTokenLink(sup.token, setCopiedToken)}
+                              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-sm bg-white border border-slate-200 hover:border-[#0064d9] text-[10px] text-slate-500 hover:text-[#0064d9] shrink-0 transition-colors">
+                              {copiedToken === sup.token ? <><Check className="h-2.5 w-2.5 text-emerald-600" /> تم</> : <><Copy className="h-2.5 w-2.5" /> نسخ</>}
                             </button>
                           </div>
                         )}
 
-                        {/* WhatsApp fallback link (when API not configured) */}
+                        {/* WhatsApp fallback */}
                         {result?.whatsappFallbackLink && (
-                          <div className="border-t px-4 py-2 bg-green-50 flex items-center gap-2">
-                            <MessageSquare className="h-3.5 w-3.5 text-green-600 shrink-0" />
-                            <span className="text-xs text-green-700">واتساب غير مُهيأ — اضغط لإرسال يدوياً:</span>
-                            <a
-                              href={result.whatsappFallbackLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs font-medium text-green-700 underline"
-                            >
-                              فتح واتساب
-                            </a>
+                          <div className="border-t border-emerald-100 px-3 py-1.5 bg-emerald-50 flex items-center gap-2">
+                            <MessageSquare className="h-3 w-3 text-emerald-600 shrink-0" />
+                            <span className="text-[10px] text-emerald-700">واتساب API غير مُهيأ —</span>
+                            <a href={result.whatsappFallbackLink} target="_blank" rel="noopener noreferrer"
+                              className="text-[10px] font-semibold text-[#0064d9] underline">فتح واتساب يدوياً</a>
                           </div>
                         )}
 
                         {/* Errors */}
                         {result?.errors && result.errors.length > 0 && !result.errors.includes("whatsapp_not_configured") && (
-                          <div className="border-t px-4 py-2 bg-red-50">
-                            <p className="text-xs text-red-500">{result.errors.join(" — ")}</p>
+                          <div className="border-t border-red-100 px-3 py-1.5 bg-red-50">
+                            <p className="text-[10px] text-red-500">{result.errors.join(" — ")}</p>
                           </div>
                         )}
-
-                        {/* Manual action buttons */}
-                        <div className="border-t px-4 py-2.5 flex flex-wrap gap-2">
-                          <Button size="sm" variant="outline" className="border-blue-200 text-blue-600 hover:bg-blue-50 h-7 text-xs px-3"
-                            onClick={() => printRfqForSupplier(rfq.rfqNo, rfq.requestDate, rfq.sourceQuotationNo, rfq.customerOrderNo, rfq.notes, sup, rfq.items, sup?.token)}>
-                            <FileText className="h-3.5 w-3.5 ml-1" /> طباعة
-                          </Button>
-                          <Button size="sm" variant="outline" className="border-green-200 text-green-600 hover:bg-green-50 h-7 text-xs px-3"
-                            onClick={() => sendWhatsApp(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup?.token)}>
-                            <MessageSquare className="h-3.5 w-3.5 ml-1" /> واتساب يدوي
-                          </Button>
-                          <Button size="sm" variant="outline" className="border-orange-200 text-orange-600 hover:bg-orange-50 h-7 text-xs px-3"
-                            onClick={() => openEmail(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup?.token)}>
-                            <Mail className="h-3.5 w-3.5 ml-1" /> إيميل يدوي
-                          </Button>
-                        </div>
                       </div>
                     );
                   })}
@@ -1321,27 +1166,33 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
           })()}
         </div>
 
-        <div className="border-t bg-slate-50 px-6 py-4 flex items-center justify-between gap-3">
+        {/* Footer */}
+        <div className="border-t border-slate-200 bg-[#f8fafc] px-5 py-3 flex items-center justify-between gap-3">
           {step <= 4 && step > 1 ? (
-            <Button variant="outline" onClick={() => setStep(s => s - 1)}>
-              <ArrowRight className="h-4 w-4 ml-1" /> السابق
-            </Button>
+            <button onClick={() => setStep(s => s - 1)}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 bg-white text-xs text-slate-600 hover:bg-slate-50 rounded-sm transition-colors">
+              <ArrowRight className="h-3.5 w-3.5" /> السابق
+            </button>
           ) : <div />}
           <div className="flex gap-2">
             {step < 4 && (
-              <Button className="bg-[#0064d9] hover:bg-[#0854a0]"
+              <button
                 disabled={(step === 1 && !foundCQ) || (step === 2 && selectedItemIds.size === 0) || (step === 3 && !step3Valid)}
-                onClick={() => goToStep(step + 1)}>
-                التالي <ArrowLeft className="h-4 w-4 mr-1" />
-              </Button>
+                onClick={() => goToStep(step + 1)}
+                className="flex items-center gap-1.5 px-4 py-1.5 bg-[#0064d9] hover:bg-[#0054b8] text-white text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed rounded-sm transition-colors">
+                التالي <ArrowLeft className="h-3.5 w-3.5" />
+              </button>
             )}
             {step === 4 && (
-              <Button className="bg-green-600 hover:bg-green-700" disabled={saving} onClick={handleSave}>
-                <Send className="h-4 w-4 ml-1" /> {saving ? "جاري الحفظ..." : "حفظ وإرسال"}
-              </Button>
+              <button disabled={saving} onClick={handleSave}
+                className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold disabled:opacity-50 rounded-sm transition-colors">
+                {saving ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> جاري الحفظ...</> : <><Send className="h-3.5 w-3.5" /> حفظ وإرسال</>}
+              </button>
             )}
             {step === 5 && (
-              <Button className="bg-[#0064d9] hover:bg-[#0854a0]" onClick={onClose}>إغلاق</Button>
+              <button onClick={onClose} className="px-4 py-1.5 bg-[#0064d9] hover:bg-[#0054b8] text-white text-xs font-semibold rounded-sm transition-colors">
+                إغلاق
+              </button>
             )}
           </div>
         </div>
@@ -1350,13 +1201,10 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   );
 }
 
-// ─── AddSupplierModal ────────────────────────────────────────────────────────
+// ─── AddSupplierModal ─────────────────────────────────────────────────────────
 
 function AddSupplierModal({ rfq, apiBase, onClose, onAdded }: {
-  rfq: Rfq;
-  apiBase: string;
-  onClose: () => void;
-  onAdded: () => void;
+  rfq: Rfq; apiBase: string; onClose: () => void; onAdded: () => void;
 }) {
   const [suppliers, setSuppliers] = React.useState<Supplier[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -1391,16 +1239,15 @@ function AddSupplierModal({ rfq, apiBase, onClose, onAdded }: {
 
   const allFilteredSelected = filtered.length > 0 && filtered.every(s => selectedIds.has(s.id));
 
-  function toggleAll() {
-    const next = new Set(selectedIds);
-    if (allFilteredSelected) { filtered.forEach(s => next.delete(s.id)); }
-    else { filtered.forEach(s => next.add(s.id)); }
-    setSelectedIds(next);
-  }
-
   function toggle(id: number) {
     const next = new Set(selectedIds);
     next.has(id) ? next.delete(id) : next.add(id);
+    setSelectedIds(next);
+  }
+  function toggleAll() {
+    const next = new Set(selectedIds);
+    if (allFilteredSelected) filtered.forEach(s => next.delete(s.id));
+    else filtered.forEach(s => next.add(s.id));
     setSelectedIds(next);
   }
 
@@ -1411,9 +1258,7 @@ function AddSupplierModal({ rfq, apiBase, onClose, onAdded }: {
     await Promise.all([...selectedIds].map(async supplierId => {
       try {
         const r = await fetch(`${apiBase}/api/supplier-quotations/${rfq.id}/suppliers`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
           body: JSON.stringify({ supplierId }),
         });
         const data = await r.json();
@@ -1421,149 +1266,120 @@ function AddSupplierModal({ rfq, apiBase, onClose, onAdded }: {
       } catch { errors.push('خطأ في الاتصال'); }
     }));
     setAdding(false);
-    if (errors.length > 0) { setError(errors[0]); }
-    else { onAdded(); }
+    if (errors.length > 0) setError(errors[0]);
+    else onAdded();
   }
 
   return (
-    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4' dir='rtl'>
-      <div className='bg-white rounded-xl shadow-2xl w-full max-w-xl flex flex-col max-h-[88vh]'>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" dir="rtl">
+      <div className="bg-white shadow-2xl w-full max-w-lg flex flex-col max-h-[88vh] border border-slate-300" style={{ borderRadius: 4 }}>
 
-        <div className='flex items-center justify-between bg-[#0f2240] px-5 py-4 rounded-t-xl'>
-          <div>
-            <h3 className='font-bold text-white text-base'>إضافة موردين للطلب</h3>
-            <p className='text-blue-200 text-xs mt-0.5 font-mono'>{rfq.rfqNo}</p>
+        {/* Header */}
+        <div className="flex items-center justify-between bg-[#0f2240] px-5 py-3">
+          <div className="flex items-center gap-2">
+            <UserPlus className="h-4 w-4 text-blue-300" />
+            <div>
+              <h3 className="font-bold text-white text-sm">إضافة موردين للطلب</h3>
+              <p className="text-blue-300 text-[10px] font-mono">{rfq.rfqNo}</p>
+            </div>
           </div>
-          <button onClick={onClose} className='text-slate-300 hover:text-white p-1 rounded-lg transition-colors'>
-            <X className='h-5 w-5' />
+          <button onClick={onClose} className="text-slate-300 hover:text-white p-1 rounded transition-colors">
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className='px-4 pt-4 pb-0'>
-          <div className='relative'>
-            <Search className='absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none' />
-            <input
-              type='text' value={search} onChange={e => setSearch(e.target.value)}
-              placeholder='بحث باسم الشركة...' dir='rtl'
-              className='w-full rounded-lg border border-slate-300 pr-9 pl-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400'
-            />
+        {/* Search */}
+        <div className="px-4 pt-3 pb-0">
+          <div className="relative">
+            <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="بحث باسم الشركة..." dir="rtl"
+              className="w-full border border-slate-300 pr-8 pl-3 py-1.5 text-xs focus:outline-none focus:border-[#0064d9] focus:ring-1 focus:ring-[#0064d9]/30 rounded-sm bg-white" />
             {search && (
-              <button onClick={() => setSearch('')} className='absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600'>
-                <X className='h-3.5 w-3.5' />
+              <button onClick={() => setSearch('')} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <X className="h-3 w-3" />
               </button>
             )}
           </div>
         </div>
 
+        {/* Category filter */}
         {!loading && categories.length > 0 && (
-          <div className='px-4 pt-3 pb-0'>
-            <div className='flex flex-wrap gap-1.5'>
-              <button
-                onClick={() => setActiveCat('all')}
-                className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${activeCat === 'all' ? 'bg-[#0f2240] text-white border-[#0f2240]' : 'bg-white text-slate-600 border-slate-300 hover:border-blue-400 hover:text-blue-700'}`}
-              >
-                الكل <span className={activeCat === 'all' ? 'text-blue-200' : 'text-slate-400'}>({suppliers.length})</span>
+          <div className="px-4 pt-2.5 flex flex-wrap gap-1.5">
+            {[{ id: 'all', name: `الكل (${suppliers.length})` }, ...categories.map(cat => ({
+              id: String(cat.id), name: `${cat.name} (${suppliers.filter(s => s.categories.some(c => c.id === cat.id)).length})`
+            }))].map(cat => (
+              <button key={cat.id} onClick={() => setActiveCat(cat.id)}
+                className={`px-2.5 py-0.5 text-[10px] font-semibold border rounded-sm transition-all
+                  ${activeCat === cat.id ? 'bg-[#0f2240] text-white border-[#0f2240]' : 'bg-white text-slate-600 border-slate-300 hover:border-[#0064d9] hover:text-[#0064d9]'}`}>
+                {cat.name}
               </button>
-              {categories.map(cat => {
-                const cnt = suppliers.filter(s => s.categories.some(c => c.id === cat.id)).length;
-                const active = activeCat === String(cat.id);
+            ))}
+          </div>
+        )}
+
+        {/* Select all bar */}
+        {!loading && filtered.length > 0 && (
+          <div className="mx-4 mt-2.5 flex items-center justify-between bg-[#f0f4f8] border border-slate-200 px-3 py-1.5 rounded-sm">
+            <button onClick={toggleAll} className="flex items-center gap-2 text-[11px] font-medium text-slate-600 hover:text-[#0064d9] transition-colors">
+              <div className={`h-4 w-4 rounded-sm border-2 flex items-center justify-center transition-colors ${allFilteredSelected ? 'bg-[#0064d9] border-[#0064d9]' : 'border-slate-400'}`}>
+                {allFilteredSelected && <Check className="h-2.5 w-2.5 text-white" />}
+              </div>
+              {allFilteredSelected ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
+            </button>
+            {selectedIds.size > 0 && (
+              <span className="text-[10px] font-bold text-[#0064d9] bg-blue-100 px-2 py-0.5 rounded-sm">{selectedIds.size} محدد</span>
+            )}
+          </div>
+        )}
+
+        {error && <p className="mx-4 mt-2 text-[11px] text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded-sm">{error}</p>}
+
+        {/* List */}
+        <div className="overflow-y-auto flex-1 mt-2">
+          {loading ? (
+            <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-10 text-slate-500 text-xs">{suppliers.length === 0 ? 'جميع الموردين النشطين مضافون بالفعل' : 'لا توجد نتائج مطابقة'}</div>
+          ) : (
+            <div className="border-t border-slate-200">
+              {filtered.map((s, idx) => {
+                const checked = selectedIds.has(s.id);
                 return (
-                  <button key={cat.id} onClick={() => setActiveCat(String(cat.id))}
-                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${active ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-300 hover:border-blue-400 hover:text-blue-700'}`}
-                  >
-                    {cat.name} <span className={active ? 'text-blue-100' : 'text-slate-400'}>({cnt})</span>
-                  </button>
+                  <div key={s.id} onClick={() => toggle(s.id)}
+                    className={`flex items-center gap-2.5 px-4 py-2 cursor-pointer select-none border-b border-slate-100 last:border-0 transition-colors
+                      ${checked ? 'bg-blue-50' : idx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/30 hover:bg-slate-50'}`}>
+                    <div className={`shrink-0 h-4 w-4 rounded-sm border-2 flex items-center justify-center transition-colors ${checked ? 'bg-[#0064d9] border-[#0064d9]' : 'border-slate-300'}`}>
+                      {checked && <Check className="h-2.5 w-2.5 text-white" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-medium ${checked ? 'text-[#0064d9]' : 'text-slate-800'}`}>{s.companyName}</p>
+                      {s.categories.length > 0 && (
+                        <p className="text-[10px] text-slate-400">{s.categories.map(c => c.name).join(' · ')}</p>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
             </div>
-          </div>
-        )}
-
-        {!loading && filtered.length > 0 && (
-          <div className='mx-4 mt-3 flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-3 py-2'>
-            <button onClick={toggleAll} className='flex items-center gap-2 text-xs font-medium text-slate-600 hover:text-blue-700 transition-colors'>
-              <div className={`h-4 w-4 rounded border-2 flex items-center justify-center transition-colors ${allFilteredSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-400'}`}>
-                {allFilteredSelected && <Check className='h-2.5 w-2.5 text-white' />}
-              </div>
-              {allFilteredSelected ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
-              {filtered.length !== suppliers.length && (
-                <span className='text-slate-400 font-normal'>({filtered.length} مورد)</span>
-              )}
-            </button>
-            {selectedIds.size > 0 && (
-              <span className='text-xs font-bold text-blue-700 bg-blue-100 px-2.5 py-0.5 rounded-full'>
-                {selectedIds.size} محدد
-              </span>
-            )}
-          </div>
-        )}
-
-        {error && (
-          <p className='mx-4 mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2'>{error}</p>
-        )}
-
-        <div className='overflow-y-auto flex-1 px-4 py-3 space-y-1'>
-          {loading ? (
-            <div className='flex items-center justify-center py-12'>
-              <Loader2 className='h-6 w-6 animate-spin text-slate-400' />
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className='text-center py-12'>
-              <p className='text-slate-500 font-medium text-sm'>
-                {suppliers.length === 0 ? 'جميع الموردين النشطين مضافون بالفعل' : 'لا توجد نتائج مطابقة'}
-              </p>
-            </div>
-          ) : (
-            filtered.map(s => {
-              const checked = selectedIds.has(s.id);
-              return (
-                <div
-                  key={s.id}
-                  onClick={() => toggle(s.id)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer border transition-all select-none ${checked ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}
-                >
-                  <div className={`shrink-0 h-4 w-4 rounded border-2 flex items-center justify-center transition-colors ${checked ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>
-                    {checked && <Check className='h-2.5 w-2.5 text-white' />}
-                  </div>
-                  <div className='flex-1 min-w-0'>
-                    <p className={`text-sm font-medium ${checked ? 'text-blue-800' : 'text-slate-800'}`}>{s.companyName}</p>
-                    {s.categories.length > 0 && (
-                      <div className='flex flex-wrap gap-1 mt-0.5'>
-                        {s.categories.map(c => (
-                          <span key={c.id} className={`text-xs px-1.5 py-0.5 rounded ${activeCat === String(c.id) ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
-                            {c.name}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })
           )}
         </div>
 
-        <div className='border-t px-4 py-3 flex items-center justify-between gap-3 bg-slate-50 rounded-b-xl'>
-          <button onClick={onClose}
-            className='px-4 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-600 hover:bg-slate-100 transition-colors'>
-            إلغاء
-          </button>
-          <button
-            onClick={handleAddSelected}
-            disabled={adding || selectedIds.size === 0}
-            className='flex items-center gap-2 px-5 py-2 rounded-lg bg-[#0064d9] hover:bg-[#0854a0] text-white text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
-          >
-            {adding ? <Loader2 className='h-4 w-4 animate-spin' /> : <UserPlus className='h-4 w-4' />}
+        {/* Footer */}
+        <div className="border-t border-slate-200 px-4 py-3 flex items-center justify-between gap-3 bg-[#f8fafc]">
+          <button onClick={onClose} className="px-4 py-1.5 border border-slate-300 bg-white text-xs text-slate-600 hover:bg-slate-50 rounded-sm transition-colors">إلغاء</button>
+          <button onClick={handleAddSelected} disabled={adding || selectedIds.size === 0}
+            className="flex items-center gap-1.5 px-5 py-1.5 bg-[#0064d9] hover:bg-[#0054b8] text-white text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed rounded-sm transition-colors">
+            {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
             {adding ? 'جاري الإضافة...' : selectedIds.size > 0 ? `إضافة ${selectedIds.size} مورد` : 'إضافة'}
           </button>
         </div>
-
       </div>
     </div>
   );
 }
 
-// ─── Main Page ───────────────────────────────────────────────────────────────
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SupplierQuotationsPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -1605,251 +1421,316 @@ export default function SupplierQuotationsPage() {
 
   return (
     <AppLayout>
-      <div className="space-y-6" dir="rtl">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <h1 className="text-2xl font-bold text-slate-800">طلبات تسعير الموردين</h1>
-          <Button className="bg-[#0064d9] hover:bg-[#0854a0] w-full sm:w-auto" onClick={() => setWizardOpen(true)}>
-            <Send className="h-4 w-4 ml-2" /> إرسال طلب تسعير للموردين
-          </Button>
+      <div className="space-y-4" dir="rtl">
+
+        {/* ── Page Toolbar ── SAP style */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-200">
+          <div>
+            <h1 className="text-base font-bold text-[#0f2240]">طلبات تسعير الموردين</h1>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {rfqs.length > 0 ? `${rfqs.length} طلب تسعير` : "قائمة طلبات التسعير المرسلة للموردين"}
+            </p>
+          </div>
+          <button onClick={() => setWizardOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#0064d9] hover:bg-[#0054b8] text-white text-xs font-semibold rounded-sm transition-colors shadow-sm">
+            <Send className="h-3.5 w-3.5" /> إرسال طلب تسعير جديد
+          </button>
         </div>
 
-        {/* Search bar */}
+        {/* ── Search bar ── */}
         <div className="relative">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
           <input
             type="text"
             value={listSearch}
             onChange={e => setListSearch(e.target.value)}
-            placeholder="بحث بـ: رقم الطلب، طلب تسعير العميل، طلب مرجعي، اسم المورد، توصيف البند، رقم القطعة..."
-            className="w-full rounded-lg border border-slate-300 bg-white pr-9 pl-9 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-200"
+            placeholder="بحث: رقم الطلب، طلب تسعير العميل، اسم المورد، رقم القطعة..."
+            className="w-full border border-slate-300 bg-white pr-9 pl-9 py-2 text-xs focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-[#0064d9]/30 rounded-sm"
             dir="rtl"
           />
           {listSearch && (
-            <button
-              onClick={() => setListSearch("")}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-            >
-              <X className="h-4 w-4" />
+            <button onClick={() => setListSearch("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              <X className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
 
-        {isLoading ? (
-          <div className="text-center text-slate-400 py-16 text-sm">جاري التحميل...</div>
-        ) : rfqs.length === 0 ? (
-          <div className="rounded-xl bg-white border border-slate-200 shadow-sm p-16 text-center">
-            <Send className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-            <p className="text-slate-500 font-medium">لا توجد طلبات تسعير حتى الآن</p>
-            <p className="text-slate-400 text-sm mt-1">اضغط على الزر أعلاه لإرسال طلب تسعير جديد للموردين</p>
-          </div>
-        ) : filteredRfqs.length === 0 ? (
-          <div className="rounded-xl bg-white border border-slate-200 shadow-sm p-10 text-center">
-            <Search className="h-10 w-10 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500 font-medium">لا توجد نتائج مطابقة</p>
-            <p className="text-slate-400 text-sm mt-1">جرّب مصطلح بحث مختلف</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {listSearch && (
-              <p className="text-sm text-slate-500">
-                {filteredRfqs.length} نتيجة من أصل {rfqs.length} طلب
-              </p>
-            )}
-            {filteredRfqs.map(rfq => {
-              const isExpanded = expandedId === rfq.id;
-              const submittedCount = rfq.suppliers.filter(s => s.responseStatus === "submitted").length;
-              return (
-                <div key={rfq.id} className="rounded-xl bg-white border border-slate-200 shadow-sm overflow-hidden">
-                  {/* Row header */}
-                  <div className="flex items-center gap-3 px-4 py-4 flex-wrap">
-                    <div className="flex-1 min-w-0 grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-sm">
-                      <div>
-                        <span className="text-slate-400 text-xs">رقم الطلب</span>
-                        <p className="font-bold text-blue-700">{rfq.rfqNo}</p>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 text-xs">طلب التسعير المرجعي</span>
-                        <p className="font-medium">{rfq.sourceQuotationNo || "—"}</p>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 text-xs">التاريخ</span>
-                        <p className="font-medium">{rfq.requestDate}</p>
-                      </div>
-                      <div className="flex gap-3">
-                        <div>
-                          <span className="text-slate-400 text-xs">البنود</span>
-                          <p className="font-medium">{rfq.items.length}</p>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 text-xs">الموردون</span>
-                          <p className="font-medium">{rfq.suppliers.length}</p>
-                        </div>
-                        {submittedCount > 0 && (
-                          <div>
-                            <span className="text-slate-400 text-xs">استجاب</span>
-                            <p className="font-medium text-green-600">{submittedCount}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                        rfq.status === "مكتمل"
-                          ? "bg-green-100 text-green-700"
-                          : rfq.status === "تم التسعير من المورد"
-                          ? "bg-amber-100 text-amber-700"
-                          : "bg-blue-100 text-blue-700"
-                      }`}>{rfq.status}</span>
-                      {submittedCount > 0 && (
-                        <button
-                          onClick={() => setAnalysisRfq({ id: rfq.id, rfqNo: rfq.rfqNo })}
-                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-100 text-purple-700 hover:bg-purple-200 text-xs font-medium transition-colors"
-                          title="تحليل ومقارنة الأسعار"
-                        >
-                          <BarChart3 className="h-3.5 w-3.5" /> تحليل
-                        </button>
-                      )}
-                      <button onClick={() => setExpandedId(isExpanded ? null : rfq.id)} className="p-1.5 rounded hover:bg-slate-100 text-slate-500">
-                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                      </button>
-                      <button onClick={() => handleDelete(rfq.id)} className="p-1.5 rounded hover:bg-red-50 text-red-400 hover:text-red-600">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
+        {/* ── Results info ── */}
+        {listSearch && (
+          <p className="text-[11px] text-slate-400">{filteredRfqs.length} نتيجة من أصل {rfqs.length} طلب</p>
+        )}
 
-                  {/* Expanded details */}
-                  {isExpanded && (
-                    <div className="border-t bg-slate-50 px-4 py-4 space-y-4">
-                      {/* Items */}
-                      <div>
-                        <p className="text-xs font-semibold text-slate-500 mb-2">البنود ({rfq.items.length})</p>
-                        <div className="rounded-lg border overflow-auto">
-                          <table className="w-full text-xs text-right">
-                            <thead className="bg-slate-100"><tr>
-                              <th className="px-3 py-2 font-medium text-slate-500">#</th>
-                              <th className="px-3 py-2 font-medium text-slate-500">الوصف</th>
-                              <th className="px-3 py-2 font-medium text-slate-500">رقم القطعة</th>
-                              <th className="px-3 py-2 font-medium text-slate-500">الكمية</th>
-                              <th className="px-3 py-2 font-medium text-slate-500">الوحدة</th>
-                            </tr></thead>
-                            <tbody>
-                              {rfq.items.map((item, idx) => (
-                                <tr key={item.id} className="border-t">
-                                  <td className="px-3 py-1.5 text-slate-400">{idx + 1}</td>
-                                  <td className="px-3 py-1.5 font-medium">{item.description}</td>
-                                  <td className="px-3 py-1.5 text-slate-500">{item.partNo || "—"}</td>
-                                  <td className="px-3 py-1.5">{item.quantity}</td>
-                                  <td className="px-3 py-1.5 text-slate-500">{item.unit || "—"}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
+        {/* ── Loading ── */}
+        {isLoading && (
+          <div className="flex items-center justify-center py-16 gap-2 text-slate-400">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span className="text-xs">جاري التحميل...</span>
+          </div>
+        )}
 
-                      {/* Suppliers */}
-                      <div>
-                        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                          <p className="text-xs font-semibold text-slate-500">الموردون ({rfq.suppliers.length})</p>
-                          <div className="flex gap-2">
+        {/* ── Empty state ── */}
+        {!isLoading && rfqs.length === 0 && (
+          <div className="border border-slate-200 bg-white rounded-sm p-14 text-center">
+            <div className="h-12 w-12 mx-auto mb-4 rounded bg-slate-100 flex items-center justify-center">
+              <Send className="h-6 w-6 text-slate-300" />
+            </div>
+            <p className="text-slate-600 font-semibold text-sm">لا توجد طلبات تسعير حتى الآن</p>
+            <p className="text-slate-400 text-xs mt-1 mb-4">اضغط على الزر أعلاه لإرسال طلب تسعير جديد للموردين</p>
+            <button onClick={() => setWizardOpen(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0064d9] hover:bg-[#0054b8] text-white text-xs font-semibold rounded-sm transition-colors">
+              <Send className="h-3.5 w-3.5" /> إرسال طلب تسعير
+            </button>
+          </div>
+        )}
+
+        {!isLoading && rfqs.length > 0 && filteredRfqs.length === 0 && (
+          <div className="border border-slate-200 bg-white rounded-sm p-10 text-center">
+            <Search className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+            <p className="text-slate-500 text-xs font-medium">لا توجد نتائج مطابقة</p>
+            <p className="text-slate-400 text-[11px] mt-1">جرّب مصطلح بحث مختلف</p>
+          </div>
+        )}
+
+        {/* ── Main Table ── */}
+        {!isLoading && filteredRfqs.length > 0 && (
+          <div className="border border-slate-200 rounded-sm overflow-hidden bg-white">
+            <table className="w-full text-right text-xs">
+              <thead>
+                <tr className="bg-[#dce3ec] border-b border-slate-300">
+                  <TH className="w-8 text-center">▼</TH>
+                  <TH>رقم الطلب</TH>
+                  <TH>طلب تسعير العميل</TH>
+                  <TH>رقم أمر الشراء</TH>
+                  <TH className="text-center">التاريخ</TH>
+                  <TH className="text-center">البنود</TH>
+                  <TH className="text-center">الموردون</TH>
+                  <TH className="text-center">الاستجابة</TH>
+                  <TH>الحالة</TH>
+                  <TH className="text-center w-28">إجراءات</TH>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRfqs.map((rfq, rowIdx) => {
+                  const isExpanded = expandedId === rfq.id;
+                  const submittedCount = rfq.suppliers.filter(s => s.responseStatus === "submitted").length;
+                  const responseRate = rfq.suppliers.length > 0
+                    ? Math.round((submittedCount / rfq.suppliers.length) * 100)
+                    : 0;
+
+                  return (
+                    <React.Fragment key={rfq.id}>
+                      {/* Main row */}
+                      <tr className={`border-b border-slate-100 cursor-pointer transition-colors
+                        ${isExpanded ? "bg-blue-50" : rowIdx % 2 === 0 ? "bg-white hover:bg-[#f0f4f8]" : "bg-slate-50/40 hover:bg-[#f0f4f8]"}`}
+                        onClick={() => setExpandedId(isExpanded ? null : rfq.id)}>
+
+                        <td className="px-2 py-2.5 text-center text-slate-400">
+                          {isExpanded
+                            ? <ChevronUp className="h-3.5 w-3.5 inline text-[#0064d9]" />
+                            : <ChevronDown className="h-3.5 w-3.5 inline" />}
+                        </td>
+                        <td className="px-3 py-2.5 font-bold text-[#0064d9] font-mono">{rfq.rfqNo}</td>
+                        <td className="px-3 py-2.5 font-mono text-slate-600">{rfq.sourceQuotationNo || "—"}</td>
+                        <td className="px-3 py-2.5 text-slate-500">{rfq.customerOrderNo || "—"}</td>
+                        <td className="px-3 py-2.5 text-center font-mono text-slate-500">{rfq.requestDate}</td>
+                        <td className="px-3 py-2.5 text-center font-semibold text-slate-700">{rfq.items.length}</td>
+                        <td className="px-3 py-2.5 text-center font-semibold text-slate-700">{rfq.suppliers.length}</td>
+                        <td className="px-3 py-2.5 text-center">
+                          {rfq.suppliers.length > 0 ? (
+                            <div className="flex items-center justify-center gap-1.5">
+                              <div className="w-14 h-1.5 bg-slate-200 rounded overflow-hidden">
+                                <div className={`h-full rounded ${responseRate >= 80 ? "bg-emerald-500" : responseRate >= 40 ? "bg-amber-400" : "bg-slate-300"}`}
+                                  style={{ width: `${responseRate}%` }} />
+                              </div>
+                              <span className={`text-[10px] font-semibold ${submittedCount > 0 ? "text-emerald-600" : "text-slate-400"}`}>
+                                {submittedCount}/{rfq.suppliers.length}
+                              </span>
+                            </div>
+                          ) : <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2.5"><StatusBadge status={rfq.status} /></td>
+                        <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-1">
+                            {submittedCount > 0 && (
+                              <button
+                                onClick={() => setAnalysisRfq({ id: rfq.id, rfqNo: rfq.rfqNo })}
+                                title="تحليل ومقارنة الأسعار"
+                                className="flex items-center gap-0.5 px-1.5 py-1 border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-sm text-[10px] font-semibold transition-colors">
+                                <BarChart3 className="h-3 w-3" /> تحليل
+                              </button>
+                            )}
                             <button
-                              onClick={() => setAddingSupplierForRfq(rfq)}
-                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-medium border border-blue-200"
-                            >
-                              <UserPlus className="h-3 w-3" /> إضافة مورد
+                              onClick={() => handleDelete(rfq.id)}
+                              title="حذف"
+                              className="p-1 border border-red-200 bg-white hover:bg-red-50 text-red-400 hover:text-red-600 rounded-sm transition-colors">
+                              <Trash2 className="h-3 w-3" />
                             </button>
-                          {submittedCount > 0 && (
-                            <button
-                              onClick={() => setAnalysisRfq({ id: rfq.id, rfqNo: rfq.rfqNo })}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 text-white hover:bg-purple-700 text-xs font-medium"
-                            >
-                              <BarChart3 className="h-3 w-3" /> تحليل ومقارنة الأسعار
-                            </button>
-                          )}
                           </div>
-                        </div>
-                        <div className="space-y-2">
-                          {rfq.suppliers.map(sup => (
-                            <div key={sup.supplierId} className="rounded-lg border bg-white overflow-hidden">
-                              <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
-                                <span className="text-sm font-medium flex-1">{sup.companyName}</span>
-                                {/* Response status badge */}
-                                <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${sup.responseStatus === "submitted" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
-                                  {sup.responseStatus === "submitted" ? <Check className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
-                                  {sup.responseStatus === "submitted" ? "استجاب" : "في الانتظار"}
-                                <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${sup.firstOpenedAt ? "bg-sky-100 text-sky-700" : "bg-slate-100 text-slate-400"}`}>
-                                  {sup.firstOpenedAt ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-                                  {sup.firstOpenedAt ? "فتح الرابط" : "لم يفتح"}
-                                </span>
-                                </span>
-                                <div className="flex gap-1.5">
-                                  <button className="flex items-center gap-1 px-2.5 py-1 rounded border border-blue-200 text-blue-600 hover:bg-blue-50 text-xs"
-                                    onClick={() => printRfqForSupplier(rfq.rfqNo, rfq.requestDate, rfq.sourceQuotationNo, rfq.customerOrderNo, rfq.notes, sup, rfq.items, sup.token)}>
-                                    <FileText className="h-3 w-3" /> PDF
-                                  </button>
-                                  <button className="flex items-center gap-1 px-2.5 py-1 rounded border border-green-200 text-green-600 hover:bg-green-50 text-xs"
-                                    onClick={() => sendWhatsApp(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup.token)}>
-                                    <MessageSquare className="h-3 w-3" /> واتساب
-                                  </button>
-                                  <button className="flex items-center gap-1 px-2.5 py-1 rounded border border-orange-200 text-orange-600 hover:bg-orange-50 text-xs"
-                                    onClick={() => openEmail(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup.token)}>
-                                    <Mail className="h-3 w-3" /> إيميل
-                                  </button>
+                        </td>
+                      </tr>
+
+                      {/* Expanded detail rows */}
+                      {isExpanded && (
+                        <tr className="border-b border-slate-200">
+                          <td colSpan={10} className="p-0">
+                            <div className="bg-[#f8fafc] border-t-2 border-[#0064d9]/30 px-5 py-4 space-y-4">
+
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                {/* Items sub-table */}
+                                <div>
+                                  <div className="flex items-center justify-between mb-2">
+                                    <p className="text-[11px] font-semibold text-slate-600 border-r-2 border-[#0064d9] pr-2">البنود ({rfq.items.length})</p>
+                                  </div>
+                                  <div className="border border-slate-200 rounded-sm overflow-hidden">
+                                    <table className="w-full text-[11px] text-right">
+                                      <thead className="bg-[#dce3ec] border-b border-slate-300">
+                                        <tr>
+                                          <TH className="w-7">#</TH>
+                                          <TH>الوصف</TH>
+                                          <TH className="text-center">الكمية</TH>
+                                          <TH className="text-center">الوحدة</TH>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {rfq.items.map((item, idx) => (
+                                          <tr key={item.id} className={`border-b border-slate-100 last:border-0 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
+                                            <td className="px-2 py-1.5 text-slate-400">{idx + 1}</td>
+                                            <td className="px-2 py-1.5 font-medium">
+                                              {item.description}
+                                              {item.partNo && <span className="text-slate-400 mr-1.5 text-[10px] font-mono">{item.partNo}</span>}
+                                            </td>
+                                            <td className="px-2 py-1.5 text-center font-mono">{item.quantity}</td>
+                                            <td className="px-2 py-1.5 text-center text-slate-500">{item.unit || "—"}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+
+                                {/* Suppliers sub-table */}
+                                <div>
+                                  <div className="flex items-center justify-between mb-2">
+                                    <p className="text-[11px] font-semibold text-slate-600 border-r-2 border-[#0064d9] pr-2">الموردون ({rfq.suppliers.length})</p>
+                                    <div className="flex items-center gap-2">
+                                      <button onClick={() => setAddingSupplierForRfq(rfq)}
+                                        className="flex items-center gap-1 px-2 py-0.5 border border-[#0064d9] bg-white hover:bg-blue-50 text-[#0064d9] text-[10px] font-semibold rounded-sm transition-colors">
+                                        <UserPlus className="h-3 w-3" /> إضافة مورد
+                                      </button>
+                                      {submittedCount > 0 && (
+                                        <button onClick={() => setAnalysisRfq({ id: rfq.id, rfqNo: rfq.rfqNo })}
+                                          className="flex items-center gap-1 px-2 py-0.5 border border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-700 text-[10px] font-semibold rounded-sm transition-colors">
+                                          <BarChart3 className="h-3 w-3" /> تحليل الأسعار
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="border border-slate-200 rounded-sm overflow-hidden">
+                                    <table className="w-full text-[11px] text-right">
+                                      <thead className="bg-[#dce3ec] border-b border-slate-300">
+                                        <tr>
+                                          <TH>المورد</TH>
+                                          <TH className="text-center">الحالة</TH>
+                                          <TH className="text-center">الرؤية</TH>
+                                          <TH className="text-center w-24">إرسال</TH>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {rfq.suppliers.map((sup, idx) => (
+                                          <React.Fragment key={sup.supplierId}>
+                                            <tr className={`border-b border-slate-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
+                                              <td className="px-2 py-1.5 font-medium text-slate-800">{sup.companyName}</td>
+                                              <td className="px-2 py-1.5 text-center">
+                                                <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-sm text-[10px] font-semibold border
+                                                  ${sup.responseStatus === "submitted"
+                                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                    : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                                                  {sup.responseStatus === "submitted"
+                                                    ? <><Check className="h-2.5 w-2.5" /> استجاب</>
+                                                    : <><Clock className="h-2.5 w-2.5" /> انتظار</>}
+                                                </span>
+                                              </td>
+                                              <td className="px-2 py-1.5 text-center">
+                                                <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-sm text-[10px] font-semibold border
+                                                  ${sup.firstOpenedAt
+                                                    ? "bg-sky-50 text-sky-700 border-sky-200"
+                                                    : "bg-slate-50 text-slate-400 border-slate-200"}`}>
+                                                  {sup.firstOpenedAt ? <><Eye className="h-2.5 w-2.5" /> فتح</> : <><EyeOff className="h-2.5 w-2.5" /> لم يفتح</>}
+                                                </span>
+                                              </td>
+                                              <td className="px-2 py-1.5 text-center">
+                                                <div className="flex items-center justify-center gap-1">
+                                                  <button title="PDF"
+                                                    onClick={() => printRfqForSupplier(rfq.rfqNo, rfq.requestDate, rfq.sourceQuotationNo, rfq.customerOrderNo, rfq.notes, sup, rfq.items, sup.token)}
+                                                    className="p-1 border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 rounded-sm transition-colors">
+                                                    <FileText className="h-3 w-3" />
+                                                  </button>
+                                                  <button title="واتساب"
+                                                    onClick={() => sendWhatsApp(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup.token)}
+                                                    className="p-1 border border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-600 rounded-sm transition-colors">
+                                                    <MessageSquare className="h-3 w-3" />
+                                                  </button>
+                                                  <button title="إيميل"
+                                                    onClick={() => openEmail(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup.token)}
+                                                    className="p-1 border border-orange-200 bg-white hover:bg-orange-50 text-orange-500 rounded-sm transition-colors">
+                                                    <Mail className="h-3 w-3" />
+                                                  </button>
+                                                </div>
+                                              </td>
+                                            </tr>
+                                            {/* Token link row */}
+                                            {sup.token && (
+                                              <tr className={`border-b border-slate-100 ${idx % 2 === 0 ? "bg-[#fafbfc]" : "bg-slate-50/60"}`}>
+                                                <td colSpan={4} className="px-2 py-1.5">
+                                                  <div className="flex items-center gap-2">
+                                                    <LinkIcon className="h-3 w-3 shrink-0 text-[#0064d9]" />
+                                                    <span className="text-[10px] text-slate-400 font-mono truncate flex-1">{getRfqLink(sup.token)}</span>
+                                                    <button onClick={() => copyTokenLink(sup.token, setCopiedToken)}
+                                                      className="flex items-center gap-0.5 px-1.5 py-0.5 border border-slate-200 bg-white hover:border-[#0064d9] hover:text-[#0064d9] text-[10px] text-slate-500 rounded-sm shrink-0 transition-colors">
+                                                      {copiedToken === sup.token ? <><Check className="h-2.5 w-2.5 text-emerald-600" /> تم</> : <><Copy className="h-2.5 w-2.5" /> نسخ الرابط</>}
+                                                    </button>
+                                                  </div>
+                                                </td>
+                                              </tr>
+                                            )}
+                                          </React.Fragment>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
                                 </div>
                               </div>
-                              {/* Token link row */}
-                              {sup.token && (
-                                <div className="flex items-center gap-2 border-t px-3 py-2 bg-slate-50">
-                                  <LinkIcon className="h-3 w-3 text-blue-400 shrink-0" />
-                                  <span className="text-xs text-slate-400 font-mono truncate flex-1">{getRfqLink(sup.token)}</span>
-                                  <button
-                                    onClick={() => copyTokenLink(sup.token, setCopiedToken)}
-                                    className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-200 hover:bg-blue-600 hover:text-white text-xs text-slate-600 shrink-0 transition-colors"
-                                  >
-                                    {copiedToken === sup.token ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
-                                    {copiedToken === sup.token ? "تم النسخ" : "نسخ الرابط"}
-                                  </button>
+
+                              {/* Notes */}
+                              {rfq.notes && (
+                                <div className="border border-amber-200 bg-amber-50 rounded-sm px-3 py-2 text-[11px] text-amber-800">
+                                  <span className="font-semibold">ملاحظات: </span>{rfq.notes}
                                 </div>
                               )}
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
       {addingSupplierForRfq && (
-        <AddSupplierModal
-          rfq={addingSupplierForRfq}
-          apiBase={API_BASE}
+        <AddSupplierModal rfq={addingSupplierForRfq} apiBase={API_BASE}
           onClose={() => setAddingSupplierForRfq(null)}
-          onAdded={() => {
-            queryClient.invalidateQueries({ queryKey: ["supplier-quotations"] });
-            setAddingSupplierForRfq(null);
-          }}
-        />
+          onAdded={() => { queryClient.invalidateQueries({ queryKey: ["supplier-quotations"] }); setAddingSupplierForRfq(null); }} />
       )}
-
       {wizardOpen && (
-        <SendWizard
-          onClose={() => setWizardOpen(false)}
-          onSaved={() => queryClient.invalidateQueries({ queryKey: ["supplier-quotations"] })}
-        />
+        <SendWizard onClose={() => setWizardOpen(false)}
+          onSaved={() => queryClient.invalidateQueries({ queryKey: ["supplier-quotations"] })} />
       )}
-
       {analysisRfq && (
-        <AnalysisModal
-          rfqId={analysisRfq.id}
-          rfqNo={analysisRfq.rfqNo}
-          onClose={() => setAnalysisRfq(null)}
-        />
+        <AnalysisModal rfqId={analysisRfq.id} rfqNo={analysisRfq.rfqNo} onClose={() => setAnalysisRfq(null)} />
       )}
     </AppLayout>
   );
