@@ -34,6 +34,8 @@ interface RfqData {
   vatIncluded: string;
   deliveryDays: number | null;
   responseNotes: string;
+  paymentTerms: string;
+  offerValidityDays: number | null;
   items: RfqItem[];
   prices: { rfqItemId: number; unitPrice: string; notes: string; vatIncluded?: string; deliveryDays?: number | null }[];
   company: CompanySettings;
@@ -61,6 +63,8 @@ export default function RfqResponsePage() {
   const [vatIncluded, setVatIncluded] = useState<"yes" | "no">("no");
   const [deliveryDays, setDeliveryDays] = useState("");
   const [responseNotes, setResponseNotes] = useState("");
+  const [paymentTerms, setPaymentTerms] = useState("");
+  const [offerValidityDays, setOfferValidityDays] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -85,6 +89,8 @@ export default function RfqResponsePage() {
         setVatIncluded((d.vatIncluded === "yes" ? "yes" : "no"));
         setDeliveryDays(d.deliveryDays != null ? String(d.deliveryDays) : "");
         setResponseNotes(d.responseNotes ?? "");
+        setPaymentTerms(d.paymentTerms ?? "");
+        setOfferValidityDays(d.offerValidityDays != null ? String(d.offerValidityDays) : "");
         if (d.responseStatus === "submitted") setSubmitted(true);
       })
       .catch((e: any) => setError(typeof e === "string" ? e : "الرابط غير صحيح أو منتهي الصلاحية"))
@@ -112,6 +118,8 @@ export default function RfqResponsePage() {
           vatIncluded,
           deliveryDays: deliveryDays ? Number(deliveryDays) : null,
           responseNotes,
+          paymentTerms,
+          offerValidityDays: offerValidityDays ? Number(offerValidityDays) : null,
         }),
       });
       const result = await res.json();
@@ -557,12 +565,41 @@ export default function RfqResponsePage() {
                   />
                 </div>
 
+                {/* Payment terms + Offer validity */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-slate-600">
+                      شروط الدفع <span className="text-slate-400 font-normal">(اختياري)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="مثال: 30% مقدماً، 70% عند التسليم"
+                      value={paymentTerms}
+                      onChange={e => setPaymentTerms(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-[#0064d9]/20"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-slate-600">
+                      صلاحية العرض <span className="text-slate-400 font-normal">(بالأيام)</span>
+                    </label>
+                    <input
+                      type="number" min="1"
+                      placeholder="مثال: 30"
+                      value={offerValidityDays}
+                      onChange={e => setOfferValidityDays(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-[#0064d9]/20"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+
                 {/* Notes / terms */}
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-slate-600">ملاحظات وشروط أخرى <span className="text-slate-400 font-normal">(اختياري)</span></label>
+                  <label className="text-sm font-medium text-slate-600">ملاحظات إضافية <span className="text-slate-400 font-normal">(اختياري)</span></label>
                   <textarea
                     rows={3}
-                    placeholder="مثال: صلاحية العرض 30 يوماً، الدفع 50% مقدماً..."
+                    placeholder="أي شروط أو ملاحظات أخرى..."
                     value={responseNotes}
                     onChange={e => setResponseNotes(e.target.value)}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-[#0064d9]/20 resize-none"
@@ -573,9 +610,9 @@ export default function RfqResponsePage() {
 
             {/* Submitted details (read-only view) */}
             {submitted && (
-              <div className="rounded-xl bg-white border border-slate-200 shadow-sm p-5 space-y-2 text-sm">
+              <div className="rounded-xl bg-white border border-slate-200 shadow-sm p-5 space-y-3 text-sm">
                 <h3 className="font-bold text-slate-700 border-b pb-2 text-sm">تفاصيل العرض المُرسَل</h3>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div>
                     <span className="text-xs text-slate-400">ضريبة القيمة المضافة</span>
                     <p className="font-medium">{data.vatIncluded === "yes" ? "شامل الضريبة (14%)" : "غير شامل الضريبة"}</p>
@@ -586,10 +623,22 @@ export default function RfqResponsePage() {
                       <p className="font-medium">{data.deliveryDays} يوم</p>
                     </div>
                   )}
+                  {data.offerValidityDays && (
+                    <div>
+                      <span className="text-xs text-slate-400">صلاحية العرض</span>
+                      <p className="font-medium">{data.offerValidityDays} يوم</p>
+                    </div>
+                  )}
+                  {data.paymentTerms && (
+                    <div>
+                      <span className="text-xs text-slate-400">شروط الدفع</span>
+                      <p className="font-medium">{data.paymentTerms}</p>
+                    </div>
+                  )}
                 </div>
                 {data.responseNotes && (
                   <div>
-                    <span className="text-xs text-slate-400">الملاحظات والشروط</span>
+                    <span className="text-xs text-slate-400">ملاحظات إضافية</span>
                     <p className="text-slate-700 mt-1">{data.responseNotes}</p>
                   </div>
                 )}
