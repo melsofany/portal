@@ -261,7 +261,7 @@ router.post("/", async (req, res) => {
     await pool.query(`
       ALTER TABLE customer_quotation_items
         ADD COLUMN IF NOT EXISTS internal_code TEXT NOT NULL DEFAULT '',
-        ADD COLUMN IF NOT EXISTS internal_code_score NUMERIC(5,4) NOT NULL DEFAULT 0
+        ADD COLUMN IF NOT EXISTS internal_code_score NUMERIC(6,2) NOT NULL DEFAULT 0
     `).catch(() => {});
 
     const quotationNo = generateQuotationNo();
@@ -327,7 +327,7 @@ router.put("/:id", async (req, res) => {
     await pool.query(`
       ALTER TABLE customer_quotation_items
         ADD COLUMN IF NOT EXISTS internal_code TEXT NOT NULL DEFAULT '',
-        ADD COLUMN IF NOT EXISTS internal_code_score NUMERIC(5,4) NOT NULL DEFAULT 0
+        ADD COLUMN IF NOT EXISTS internal_code_score NUMERIC(6,2) NOT NULL DEFAULT 0
     `).catch(() => {});
 
     const [existing] = await db
