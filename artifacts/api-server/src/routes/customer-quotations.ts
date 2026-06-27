@@ -293,6 +293,25 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "يجب إضافة بند واحد على الأقل" });
     }
 
+    // ── Duplicate customerOrderNo check for same customer ──
+    if (customerOrderNo?.trim()) {
+      const duplicate = await db
+        .select({ id: customerQuotationsTable.id, quotationNo: customerQuotationsTable.quotationNo })
+        .from(customerQuotationsTable)
+        .where(
+          and(
+            eq(customerQuotationsTable.customerId, Number(customerId)),
+            eq(customerQuotationsTable.customerOrderNo, customerOrderNo.trim())
+          )
+        )
+        .limit(1);
+      if (duplicate.length > 0) {
+        return res.status(409).json({
+          error: `رقم طلب العميل "${customerOrderNo.trim()}" مسجّل مسبقاً في الطلب ${duplicate[0].quotationNo} لنفس العميل`,
+        });
+      }
+    }
+
     // ── Ensure new columns exist (migration guard) ──
     await pool.query(`
       ALTER TABLE customer_quotation_items
@@ -359,6 +378,25 @@ router.put("/:id", async (req, res) => {
     if (!requestDate) return res.status(400).json({ error: "تاريخ الطلب مطلوب" });
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "يجب إضافة بند واحد على الأقل" });
+    }
+
+    // ── Duplicate customerOrderNo check for same customer (exclude current record) ──
+    if (customerOrderNo?.trim()) {
+      const duplicate = await db
+        .select({ id: customerQuotationsTable.id, quotationNo: customerQuotationsTable.quotationNo })
+        .from(customerQuotationsTable)
+        .where(
+          and(
+            eq(customerQuotationsTable.customerId, Number(customerId)),
+            eq(customerQuotationsTable.customerOrderNo, customerOrderNo.trim())
+          )
+        )
+        .limit(1);
+      if (duplicate.length > 0 && duplicate[0].id !== id) {
+        return res.status(409).json({
+          error: `رقم طلب العميل "${customerOrderNo.trim()}" مسجّل مسبقاً في الطلب ${duplicate[0].quotationNo} لنفس العميل`,
+        });
+      }
     }
 
     // ── Ensure new columns exist (migration guard) ──
