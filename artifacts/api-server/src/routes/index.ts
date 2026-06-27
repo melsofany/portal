@@ -20,8 +20,9 @@ import { Router, type IRouter } from "express";
   import employeesRouter from "./employees";
   import usersRouter from "./users";
     import { requireAuth, requirePermission, requireAdmin } from "../middlewares/authMiddleware";
+    import { eq } from "drizzle-orm";
       import { db } from "@workspace/db";
-      import { companySettingsTable } from "@workspace/db/schema";
+      import { companySettingsTable, employeesTable } from "@workspace/db/schema";
 
     const router: IRouter = Router();
 
@@ -83,7 +84,17 @@ import { Router, type IRouter } from "express";
     router.use("/delivery-permits",       requirePermission("customerOrders"), deliveryPermitsRouter);
     router.use("/items",                  requirePermission("suppliers"),      itemsRouter);
     router.use("/dashboard",              requirePermission("dashboard"),      dashboardRouter);
-    router.use("/employees",              requirePermission("employees"),      employeesRouter);
+    // Any authenticated user can read their own employee record (for PDF generation etc.)
+      router.get("/employees/me", async (req, res) => {
+        try {
+          const userId = req.auth?.userId;
+          if (!userId) return res.json({ phone: "", fullName: "" });
+          const [emp] = await db.select({ phone: employeesTable.phone, fullName: employeesTable.fullName })
+            .from(employeesTable).where(eq(employeesTable.userId, userId)).limit(1);
+          res.json(emp ?? { phone: "", fullName: "" });
+        } catch { res.json({ phone: "", fullName: "" }); }
+      });
+      router.use("/employees",              requirePermission("employees"),      employeesRouter);
     router.use("/users",                  requireAdmin,                        usersRouter);
 
     export default router;
