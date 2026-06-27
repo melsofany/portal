@@ -312,7 +312,20 @@ import { useState, useMemo, useEffect, useRef } from "react";
           } catch { setErrors({ server: "حدث خطأ أثناء الحفظ" }); }
           finally { setSaving(false); }
         } else {
-          createQuotation.mutate({ data: body as any });
+          setSaving(true);
+          try {
+            const r = await fetch(`${API_BASE}/api/customer-quotations`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify(body),
+            });
+            const data = await r.json();
+            if (!r.ok) { setErrors({ server: data.error ?? "فشل في إنشاء الطلب" }); return; }
+            queryClient.invalidateQueries({ queryKey: getGetCustomerQuotationsQueryKey() });
+            setOpen(false); setHeader(emptyHeader); setItems([emptyItem()]); setErrors({});
+          } catch { setErrors({ server: "حدث خطأ أثناء الحفظ" }); }
+          finally { setSaving(false); }
         }
       }
 
