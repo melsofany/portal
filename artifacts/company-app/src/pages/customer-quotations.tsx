@@ -500,12 +500,6 @@ import { useState, useMemo, useEffect, useRef } from "react";
                     </div>
                   </div>
 
-                  {/* Auto-coding notice */}
-                  <div className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-700">
-                    <Sparkles className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
-                    محرك التكويد يربط كل بند بالكود الإداري تلقائياً عند الحفظ — الكود يظهر <CheckCircle2 className="h-3 w-3 inline text-emerald-500 mx-0.5" /> أسفل كل توصيف
-                  </div>
-
                   {/* Items table */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -522,9 +516,6 @@ import { useState, useMemo, useEffect, useRef } from "react";
                             <th className="px-2 py-2 font-medium text-slate-500 text-xs">كود البند</th>
                             <th className="px-2 py-2 font-medium text-slate-500 text-xs">
                               التوصيف *
-                              <span className="mr-1 text-emerald-600 inline-flex items-center gap-0.5">
-                                <Sparkles className="h-3 w-3" />تكويد تلقائي
-                              </span>
                             </th>
                             <th className="px-2 py-2 font-medium text-slate-500 text-xs">PART NO</th>
                             <th className="px-2 py-2 font-medium text-slate-500 text-xs">الوحدة</th>
