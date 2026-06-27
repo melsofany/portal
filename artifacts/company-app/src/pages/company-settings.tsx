@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import AppLayout from "@/components/AppLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -6,15 +6,447 @@ import {
   Building2, Save, Upload, X, Mail, MessageCircle,
   FileText, Landmark, Eye, EyeOff, Plus, Trash2, ShieldAlert,
   Users, Pencil, UserPlus, Lock, Power, PowerOff, CheckCircle,
-  XCircle, RefreshCw, Shield, AlertTriangle, KeyRound, Wand2, BrainCircuit
+  XCircle, RefreshCw, Shield, AlertTriangle, KeyRound, Wand2, BrainCircuit, Search
 } from "lucide-react";
-import { API_BASE } from "@/lib/auth-context";
+import { API_BASE, useAuth } from "@/lib/auth-context";
 
 function getAuthHeaders(): Record<string, string> {
   try {
     const token = localStorage.getItem("auth_token");
     return token ? { Authorization: `Bearer ${token}` } : {};
   } catch { return {}; }
+}
+
+function apiFetch(path: string, opts?: RequestInit) {
+  const token = localStorage.getItem("auth_token");
+  return fetch(`${API_BASE}${path}`, {
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(opts?.headers ?? {}),
+    },
+    ...opts,
+  }).then(async (r) => {
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || "خطأ في الطلب");
+    return data;
+  });
+}
+
+// ─── Coding Types ───
+interface CanonicalItem {
+  id: number;
+  internal_code: string;
+  brand: string;
+  category: string;
+  description_ar: string;
+  description_en: string;
+  keywords: string[];
+  notes: string;
+  fingerprint: Record<string, string>;
+  fingerprint_hash: string;
+  created_at: string;
+}
+
+interface MatchResult {
+  matched: boolean;
+  score: number;
+  decision: "auto_link" | "confirm" | "new";
+  item: CanonicalItem | null;
+  fingerprint: Record<string, string>;
+}
+
+const DECISION_CONFIG = {
+  auto_link: { label: "ربط تلقائي",  bar: "bg-emerald-500", badge: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+  confirm:   { label: "يحتاج تأكيد", bar: "bg-amber-400",   badge: "bg-amber-100 text-amber-800 border-amber-200"       },
+  new:       { label: "كود جديد",    bar: "bg-blue-500",    badge: "bg-blue-100 text-blue-800 border-blue-200"           },
+};
+
+const FP_LABELS: Record<string, string> = {
+  category: "الفئة", brand: "الماركة", series: "السلسلة",
+  current: "التيار", poles: "الأقطاب", voltage: "الجهد",
+  partNumber: "رقم الموديل", power: "القدرة", frequency: "التردد",
+  mounting: "التركيب", auxiliary: "اتصالات مساعدة",
+};
+
+function FingerprintBadges({ fp }: { fp: Record<string, string> }) {
+  const entries = Object.entries(fp).filter(([, v]) => v);
+  if (!entries.length) return <span className="text-slate-400 text-xs">—</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {entries.map(([k, v]) => (
+        <span key={k} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+          <span className="text-slate-400">{FP_LABELS[k] ?? k}:</span>
+          <span className="font-medium">{v}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ItemModal({ item, onClose, onSaved }: { item: CanonicalItem | null; onClose: () => void; onSaved: () => void }) {
+  const isEdit = !!item;
+  const [form, setForm] = useState({
+    brand:          item?.brand ?? "",
+    category:       item?.category ?? "",
+    description_ar: item?.description_ar ?? "",
+    description_en: item?.description_en ?? "",
+    keywords:       (item?.keywords ?? []).join(", "),
+    notes:          item?.notes ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState("");
+
+  const handle = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.description_ar.trim() && !form.description_en.trim()) { setError("أدخل توصيفاً على الأقل"); return; }
+    setSaving(true); setError("");
+    try {
+      const body = { ...form, keywords: form.keywords.split(",").map((k) => k.trim()).filter(Boolean) };
+      if (isEdit) await apiFetch(`/api/item-coding/canonical/${item!.id}`, { method: "PUT", body: JSON.stringify(body) });
+      else        await apiFetch("/api/item-coding/canonical",             { method: "POST", body: JSON.stringify(body) });
+      onSaved(); onClose();
+    } catch (err: any) { setError(err.message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <h2 className="text-base font-bold text-slate-800">{isEdit ? "تعديل البند" : "إضافة بند مرجعي"}</h2>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">✕</button>
+        </div>
+        <form onSubmit={submit} className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">الماركة</label>
+              <input value={form.brand} onChange={handle("brand")} placeholder="Schneider, ABB…"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#0064d9] focus:ring-1 focus:ring-[#0064d9]/20" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">الفئة</label>
+              <input value={form.category} onChange={handle("category")} placeholder="Contactor, Relay…"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#0064d9] focus:ring-1 focus:ring-[#0064d9]/20" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">التوصيف العربي</label>
+            <textarea value={form.description_ar} onChange={handle("description_ar")} rows={2}
+              placeholder="كونتاكتور شنايدر 32 أمبير…"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#0064d9] focus:ring-1 focus:ring-[#0064d9]/20 resize-none" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">التوصيف الإنجليزي</label>
+            <textarea value={form.description_en} onChange={handle("description_en")} rows={2}
+              placeholder="Schneider TeSys D Contactor 32A 3P 220VAC…"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#0064d9] focus:ring-1 focus:ring-[#0064d9]/20 resize-none" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">كلمات مفتاحية (مفصولة بفاصلة)</label>
+            <input value={form.keywords} onChange={handle("keywords")} placeholder="contactor, 32A, LC1D32M7"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#0064d9] focus:ring-1 focus:ring-[#0064d9]/20" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">ملاحظات</label>
+            <input value={form.notes} onChange={handle("notes")}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#0064d9] focus:ring-1 focus:ring-[#0064d9]/20" />
+          </div>
+          {error && <p className="text-xs text-red-600 bg-red-50 rounded px-3 py-2">{error}</p>}
+          <div className="flex gap-3 pt-1">
+            <button type="submit" disabled={saving}
+              className="flex-1 rounded-lg bg-[#0064d9] py-2.5 text-sm font-medium text-white hover:bg-[#0854a0] disabled:opacity-60 transition-colors">
+              {saving ? "جاري الحفظ…" : isEdit ? "حفظ التعديلات" : "إضافة البند"}
+            </button>
+            <button type="button" onClick={onClose}
+              className="rounded-lg border border-slate-200 px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">
+              إلغاء
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function CodingSection() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const canEdit = user?.role === "admin";
+
+  const { data: canonicalItems = [], isLoading } = useQuery<CanonicalItem[]>({
+    queryKey: ["canonical-items"],
+    queryFn: () => apiFetch("/api/item-coding/canonical"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => apiFetch(`/api/item-coding/canonical/${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["canonical-items"] }),
+  });
+
+  const [testDesc,    setTestDesc]    = useState("");
+  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  const [matching,    setMatching]    = useState(false);
+  const [modalItem,   setModalItem]   = useState<CanonicalItem | null | undefined>(undefined);
+  const [search,      setSearch]      = useState("");
+
+  const filtered = canonicalItems.filter((it) =>
+    !search || [it.internal_code, it.brand, it.category, it.description_ar, it.description_en]
+      .some((f) => f?.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  const runMatch = async () => {
+    if (!testDesc.trim()) return;
+    setMatching(true); setMatchResult(null);
+    try {
+      const res = await apiFetch("/api/item-coding/match", { method: "POST", body: JSON.stringify({ description: testDesc }) });
+      setMatchResult(res);
+    } catch { } finally { setMatching(false); }
+  };
+
+  const createNew = async () => {
+    if (!matchResult) return;
+    await apiFetch("/api/item-coding/canonical", {
+      method: "POST",
+      body: JSON.stringify({
+        description_en: testDesc,
+        brand:    matchResult.fingerprint.brand ?? "",
+        category: matchResult.fingerprint.category ?? "",
+      }),
+    });
+    qc.invalidateQueries({ queryKey: ["canonical-items"] });
+    setMatchResult(null); setTestDesc("");
+  };
+
+  const dc = matchResult ? DECISION_CONFIG[matchResult.decision] : null;
+
+  return (
+    <div className="space-y-4">
+      {/* ── How it works ── */}
+      <div className="grid grid-cols-3 gap-3 text-center">
+        {[
+          { range: "≥ 95%",  label: "ربط تلقائي",  desc: "نفس المنتج بالتأكيد",   dot: "bg-emerald-500", bg: "bg-emerald-50 border-emerald-200" },
+          { range: "80–94%", label: "يحتاج تأكيد", desc: "قد يكون نفس المنتج",    dot: "bg-amber-400",   bg: "bg-amber-50 border-amber-200"     },
+          { range: "< 70%",  label: "كود جديد",    desc: "منتج مختلف — كود جديد", dot: "bg-blue-500",    bg: "bg-blue-50 border-blue-200"       },
+        ].map((t) => (
+          <div key={t.range} className={`border rounded-sm p-3 ${t.bg}`}>
+            <div className="flex items-center justify-center gap-1.5 mb-1">
+              <span className={`w-2 h-2 rounded-full ${t.dot}`}></span>
+              <span className="text-sm font-black">{t.range}</span>
+            </div>
+            <div className="text-xs font-bold">{t.label}</div>
+            <div className="text-[10px] opacity-70 mt-0.5">{t.desc}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Match Tester ── */}
+      <div className="rounded-sm border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="bg-[#dce3ec] border-b-2 border-[#0064d9]/20 px-4 py-2">
+          <span className="text-[11px] font-semibold text-[#1e3a5f] uppercase tracking-wider">محرك التكويد — اختبار المطابقة</span>
+        </div>
+        <div className="p-4">
+          <div className="flex gap-3">
+            <textarea
+              value={testDesc}
+              onChange={(e) => setTestDesc(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey) runMatch(); }}
+              rows={3}
+              placeholder={"أدخل توصيف البند… مثال: كونتاكتور شنايدر LC1D32M7 3P 32A 220VAC\n(Ctrl+Enter للبحث)"}
+              className="flex-1 rounded-sm border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0064d9] focus:ring-1 focus:ring-[#0064d9]/20 resize-none"
+            />
+            <button
+              onClick={runMatch}
+              disabled={matching || !testDesc.trim()}
+              className="self-start rounded-sm bg-[#0064d9] px-5 py-2 text-sm font-semibold text-white hover:bg-[#0854a0] disabled:opacity-50 transition-colors whitespace-nowrap">
+              {matching ? "جاري…" : "مطابقة"}
+            </button>
+          </div>
+
+          {matchResult && dc && (
+            <div className="mt-4 border border-slate-200 rounded-sm overflow-hidden">
+              <div className="h-1.5 bg-slate-100">
+                <div className={`h-1.5 transition-all ${dc.bar}`} style={{ width: `${matchResult.score}%` }} />
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className={`inline-block border rounded-sm px-2.5 py-1 text-xs font-bold ${dc.badge}`}>{dc.label}</span>
+                  <span className="text-sm font-bold text-slate-700">{matchResult.score}% تطابق</span>
+                  {matchResult.item && (
+                    <span className="font-mono text-sm font-bold tracking-widest bg-[#1e3a5f] text-white rounded-sm px-3 py-1">
+                      {matchResult.item.internal_code}
+                    </span>
+                  )}
+                </div>
+                {(matchResult as any).method && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[10px] font-semibold border ${
+                      (matchResult as any).method === "gemini"
+                        ? "bg-purple-50 text-purple-700 border-purple-200"
+                        : (matchResult as any).method === "hash"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : "bg-slate-50 text-slate-600 border-slate-200"
+                    }`}>
+                      {(matchResult as any).method === "gemini" ? "✦ Gemini AI" : (matchResult as any).method === "hash" ? "⚡ تطابق فوري" : "⚙ قاعدي"}
+                    </span>
+                  </div>
+                )}
+                {(matchResult as any).reasoning && (
+                  <div className="flex items-start gap-2 bg-purple-50 border border-purple-200 rounded-sm px-3 py-2">
+                    <span className="text-purple-500 text-xs mt-0.5 shrink-0">✦</span>
+                    <p className="text-xs text-purple-800 font-medium leading-relaxed">{(matchResult as any).reasoning}</p>
+                  </div>
+                )}
+                {Object.keys(matchResult.fingerprint).length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">الخصائص المستخرجة من التوصيف (بصمة المنتج):</p>
+                    <FingerprintBadges fp={matchResult.fingerprint} />
+                  </div>
+                )}
+                {matchResult.item && (
+                  <div className="rounded-sm border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">البند المطابق في قاعدة الكودات:</p>
+                    <p className="text-sm font-semibold text-slate-800">{matchResult.item.description_en || matchResult.item.description_ar}</p>
+                    {matchResult.item.description_ar && matchResult.item.description_en && (
+                      <p className="text-xs text-slate-500 mt-0.5">{matchResult.item.description_ar}</p>
+                    )}
+                    <div className="flex gap-2 mt-2 flex-wrap">
+                      {matchResult.item.brand    && <span className="text-xs bg-white border rounded px-2 py-0.5">{matchResult.item.brand}</span>}
+                      {matchResult.item.category && <span className="text-xs bg-white border rounded px-2 py-0.5">{matchResult.item.category}</span>}
+                    </div>
+                  </div>
+                )}
+                <div className="flex gap-2 flex-wrap pt-1">
+                  {matchResult.decision === "auto_link" && (
+                    <button onClick={() => { setMatchResult(null); setTestDesc(""); }}
+                      className="rounded-sm bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
+                      ✓ تأكيد الربط — الكود: {matchResult.item?.internal_code}
+                    </button>
+                  )}
+                  {matchResult.decision === "confirm" && (
+                    <>
+                      <button onClick={() => { setMatchResult(null); setTestDesc(""); }}
+                        className="rounded-sm bg-amber-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-amber-700">
+                        نعم — ربط بالكود {matchResult.item?.internal_code}
+                      </button>
+                      <button onClick={createNew}
+                        className="rounded-sm bg-[#0064d9] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#0854a0]">
+                        لا — إنشاء كود جديد
+                      </button>
+                    </>
+                  )}
+                  {matchResult.decision === "new" && (
+                    <button onClick={createNew}
+                      className="rounded-sm bg-[#0064d9] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#0854a0]">
+                      + إنشاء كود إداري جديد
+                    </button>
+                  )}
+                  <button onClick={() => { setMatchResult(null); setTestDesc(""); }}
+                    className="rounded-sm border border-slate-300 px-4 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                    مسح
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Canonical Items Table ── */}
+      <div className="rounded-sm border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="bg-[#dce3ec] border-b-2 border-[#0064d9]/20 px-4 py-2 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] font-semibold text-[#1e3a5f] uppercase tracking-wider">قاعدة الكودات الإدارية</span>
+            <span className="text-[11px] bg-[#1e3a5f] text-white px-2 py-0.5 rounded-sm font-semibold tabular-nums">{canonicalItems.length} بند</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="بحث…"
+                className="rounded-sm border border-slate-300 pr-7 pl-3 py-1 text-xs outline-none focus:border-[#0064d9] w-44" />
+            </div>
+            {canEdit && (
+              <button onClick={() => setModalItem(null)}
+                className="rounded-sm bg-[#0064d9] px-3 py-1 text-xs font-semibold text-white hover:bg-[#0854a0]">
+                + إضافة بند
+              </button>
+            )}
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="py-12 text-center text-slate-400 text-sm animate-pulse">جاري التحميل…</div>
+        ) : filtered.length === 0 ? (
+          <div className="py-12 text-center text-slate-400 text-sm">
+            {search ? "لا توجد نتائج" : "لا توجد كودات بعد — جرّب محرك المطابقة أو أضف بنداً"}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-xs border-collapse">
+              <thead>
+                <tr className="bg-[#eef0f4] border-b border-slate-300 text-slate-600">
+                  <th className="px-3 py-2.5 font-semibold border-l border-slate-200 whitespace-nowrap">الكود الإداري</th>
+                  <th className="px-3 py-2.5 font-semibold border-l border-slate-200 whitespace-nowrap">الفئة / الماركة</th>
+                  <th className="px-3 py-2.5 font-semibold border-l border-slate-200">التوصيف</th>
+                  <th className="px-3 py-2.5 font-semibold border-l border-slate-200">بصمة المنتج</th>
+                  <th className="px-3 py-2.5 font-semibold border-l border-slate-200 whitespace-nowrap">Hash</th>
+                  <th className="px-3 py-2.5 font-semibold w-16"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((item, idx) => (
+                  <tr key={item.id} className={`border-b border-slate-100 hover:bg-blue-50/30 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
+                    <td className="px-3 py-2.5 border-l border-slate-100">
+                      <span className="font-mono font-bold tracking-widest text-[#1e3a5f] bg-[#1e3a5f]/8 rounded-sm px-2 py-1 text-[11px] border border-[#1e3a5f]/20">
+                        {item.internal_code}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 border-l border-slate-100">
+                      <div className="space-y-0.5">
+                        {item.category && <span className="inline-block rounded-sm bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0.5 font-semibold">{item.category}</span>}
+                        {item.brand && <div className="text-slate-500 text-[11px]">{item.brand}</div>}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 border-l border-slate-100 max-w-[220px]">
+                      {item.description_en && <p className="font-medium text-slate-800 truncate">{item.description_en}</p>}
+                      {item.description_ar && <p className="text-slate-500 mt-0.5 truncate">{item.description_ar}</p>}
+                    </td>
+                    <td className="px-3 py-2.5 border-l border-slate-100 max-w-[240px]">
+                      <FingerprintBadges fp={item.fingerprint ?? {}} />
+                    </td>
+                    <td className="px-3 py-2.5 border-l border-slate-100">
+                      {item.fingerprint_hash && <span className="font-mono text-[10px] text-slate-400">#{item.fingerprint_hash}</span>}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      {canEdit && (
+                        <div className="flex items-center gap-1 justify-end">
+                          <button onClick={() => setModalItem(item)} className="rounded p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50" title="تعديل">✎</button>
+                          <button onClick={() => { if (confirm(`حذف ${item.internal_code}؟`)) deleteMutation.mutate(item.id); }}
+                            className="rounded p-1 text-slate-400 hover:text-red-600 hover:bg-red-50" title="حذف">✕</button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {modalItem !== undefined && (
+        <ItemModal
+          item={modalItem}
+          onClose={() => setModalItem(undefined)}
+          onSaved={() => qc.invalidateQueries({ queryKey: ["canonical-items"] })}
+        />
+      )}
+    </div>
+  );
 }
 
 interface WhatsAppTemplate { name: string; language: string; body: string; }
@@ -522,8 +954,9 @@ export default function CompanySettingsPage() {
 
           {/* ── التكويد الذكي ── */}
           {activeTab === "coding" && (
-            <div className="space-y-4 max-w-2xl">
-              <SapSection title="تكويد البنود" icon={<Wand2 className="h-4 w-4 text-[#0064d9]" />}>
+            <div className="space-y-4 max-w-4xl">
+              <CodingSection />
+              <SapSection title="تكويد البنود تلقائياً" icon={<Wand2 className="h-4 w-4 text-[#0064d9]" />}>
                 <div className="space-y-4">
                   <p className="text-xs text-slate-500 leading-relaxed">
                     يعطي النظام لكل بند رقماً إدارياً موحداً (مثل <code className="font-mono bg-slate-100 px-1 rounded">000001</code>)
