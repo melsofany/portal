@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import AppLayout from "@/components/AppLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
-import { Search, Package, X, ChevronLeft } from "lucide-react";
+import { Search, Package, X, ChevronLeft, Wand2 } from "lucide-react";
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
 
@@ -659,13 +659,39 @@ export default function ItemsPage() {
   const [search,       setSearch]       = useState("");
   const [selectedDesc, setSelectedDesc] = useState<string | null>(null);
   const [tab,          setTab]          = useState<"items" | "coding">("items");
+  const [backfilling,  setBackfilling]  = useState(false);
+  const [backfillMsg,  setBackfillMsg]  = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchItems = () => {
     fetch(`${API_BASE}/api/items`, { credentials: "include" })
       .then(r => r.json())
       .then(data => { setItems(Array.isArray(data) ? data : []); setLoading(false); })
       .catch(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { fetchItems(); }, []);
+
+  const runBackfill = async () => {
+    setBackfilling(true);
+    setBackfillMsg(null);
+    try {
+      const token = localStorage.getItem("auth_token");
+      const r = await fetch(`${API_BASE}/api/items/backfill-codes`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "خطأ");
+      setBackfillMsg(`✓ تم تكويد ${data.coded} بند من أصل ${data.total} (فشل: ${data.failed})`);
+      setLoading(true);
+      fetchItems();
+    } catch (err: any) {
+      setBackfillMsg(`✗ ${err.message}`);
+    } finally {
+      setBackfilling(false);
+    }
+  };
 
   const filtered = items.filter(item => {
     if (!search.trim()) return true;
@@ -693,12 +719,31 @@ export default function ItemsPage() {
                 : "الكود الإداري الموحد · محرك التكويد القائم على بصمة المنتج"}
             </p>
           </div>
-          {tab === "items" && (
-            <span className="text-xs bg-[#1e3a5f] text-white px-3 py-1 rounded-sm font-semibold tabular-nums">
-              {filtered.length} بند
-            </span>
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {tab === "items" && (
+              <span className="text-xs bg-[#1e3a5f] text-white px-3 py-1 rounded-sm font-semibold tabular-nums">
+                {filtered.length} بند
+              </span>
+            )}
+            {tab === "items" && (
+              <button
+                onClick={runBackfill}
+                disabled={backfilling}
+                className="flex items-center gap-1.5 rounded-sm bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white text-xs font-semibold px-3 py-1.5 transition-colors"
+              >
+                <Wand2 className="h-3.5 w-3.5" />
+                {backfilling ? "جاري التكويد…" : "كود البنود الحالية"}
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* ── Backfill result ── */}
+        {backfillMsg && (
+          <div className={`text-xs px-4 py-2 rounded-sm border font-medium ${backfillMsg.startsWith("✓") ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"}`}>
+            {backfillMsg}
+          </div>
+        )}
 
         {/* ── Tabs ── */}
         <div className="flex border-b border-slate-300 gap-0">
