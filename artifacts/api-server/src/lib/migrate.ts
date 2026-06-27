@@ -573,6 +573,11 @@ import { pool } from "@workspace/db";
               ALTER TABLE customer_quotation_items
                 ALTER COLUMN internal_code_score TYPE NUMERIC(6,2);
             `).catch(() => {});
+
+          // Add gemini_api_key column to company_settings
+          await client.query(`
+            ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS gemini_api_key TEXT DEFAULT '';
+          `);
   
           console.log("[migrate] Schema ready");
     } finally {
