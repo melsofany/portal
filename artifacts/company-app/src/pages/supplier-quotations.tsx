@@ -135,29 +135,111 @@ async function copyTokenLink(token: string, setCopied: (id: string) => void) {
   }
 }
 
-async function downloadRfqPdf(rfqId: number, supplierId: number) {
-    const token = getAuthToken();
-    const headers: Record<string, string> = {};
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-    try {
-      const res = await fetch(`${API_BASE}/api/supplier-quotations/${rfqId}/pdf/${supplierId}`, {
-        credentials: "include",
-        headers,
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({})) as any;
-        alert(err.error ?? "فشل في توليد الـ PDF");
-        return;
-      }
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      window.open(url, "_blank");
-    } catch {
-      alert("فشل في الاتصال بالخادم");
-    }
-  }
+async function downloadRfqPdf(rfq: Rfq, sup: RfqSupplier) {
+    // Open the window SYNCHRONOUSLY before any await — required for iOS Safari popup policy
+    const win = window.open("", "_blank", "width=900,height=700");
+    if (!win) { alert("يرجى السماح بالنوافذ المنبثقة في المتصفح"); return; }
+    win.document.write('<html dir="rtl"><body style="font-family:Arial;padding:40px;text-align:center;color:#1e3a8a"><p>جاري التحميل…</p></body></html>');
 
-  
+    // Get buyer company name from public settings (no auth needed)
+    let companyName = "";
+    try {
+      const s = await fetch(`${API_BASE}/api/settings/public`);
+      if (s.ok) { const j = await s.json() as any; companyName = j.name ?? ""; }
+    } catch { /* ignore */ }
+
+    // Decode JWT payload to get sender name (read-only, no sig check)
+    let senderName = "";
+    try {
+      const tok = getAuthToken();
+      if (tok) {
+        const payload = JSON.parse(atob(tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+        senderName = (payload.fullName ?? payload.name ?? "") as string;
+      }
+    } catch { /* ignore */ }
+
+    // Build table rows
+    const tableRows = rfq.items.map((item, idx) => `
+      <tr style="border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? "#fff" : "#f8fafc"}">
+        <td style="padding:7px 10px;text-align:center;color:#64748b;font-size:11px">${idx + 1}</td>
+        <td style="padding:7px 10px;text-align:right;font-size:12px">${item.description ?? ""}</td>
+        <td style="padding:7px 10px;text-align:center;font-size:11px;color:#475569">${item.partNo ?? ""}</td>
+        <td style="padding:7px 10px;text-align:center;font-size:11px">${item.unit ?? ""}</td>
+        <td style="padding:7px 10px;text-align:center;font-size:12px;font-weight:600">${item.quantity ?? ""}</td>
+      </tr>`).join("");
+
+    const html = `<!DOCTYPE html>
+  <html dir="rtl" lang="ar">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>طلب تسعير ${rfq.rfqNo}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet"/>
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:'Cairo',Arial,sans-serif;direction:rtl;background:#fff;color:#1e293b}
+      @media print{@page{size:A4;margin:0}body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.no-print{display:none!important}}
+      .page{max-width:794px;margin:0 auto}
+      .hdr{background:#0f2240;color:#fff;padding:18px 32px}
+      .hdr-t{font-size:18px;font-weight:700;text-align:right}
+      .hdr-c{font-size:11px;color:#94a3b8;margin-top:4px;text-align:right}
+      .body{padding:20px 32px}
+      .rfqbox{background:#f0f7ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 14px;margin-bottom:16px}
+      .rfqlbl{font-size:9px;color:#3b82f6;text-align:right}
+      .rfqval{font-size:16px;font-weight:700;color:#1e3a8a;text-align:right}
+      .igrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+      .ibox{background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:7px 12px}
+      .ilbl{font-size:9px;color:#64748b;text-align:right}
+      .ival{font-size:12px;font-weight:600;color:#1e293b;text-align:right}
+      table{width:100%;border-collapse:collapse;border:1px solid #e2e8f0}
+      thead tr{background:#1e3a5f}
+      thead th{padding:9px 10px;text-align:center;color:#fff;font-size:10px;font-weight:600}
+      .nbox{margin-top:16px;background:#fffbeb;border:1px solid #fde68a;border-radius:5px;padding:10px 14px}
+      .nlbl{font-size:9px;color:#92400e;margin-bottom:4px}
+      .ntxt{font-size:11px;color:#78350f}
+      .sbox{margin-top:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:8px 14px}
+      .slbl{font-size:9px;color:#64748b;margin-bottom:2px}
+      .sval{font-size:11px;font-weight:600}
+      .pbtn{position:fixed;bottom:20px;left:20px;background:#1e3a8a;color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:14px;font-family:'Cairo',Arial,sans-serif;cursor:pointer}
+    </style>
+  </head>
+  <body>
+  <div class="page">
+    <div class="hdr">
+      <div class="hdr-t">طلب تسعير / Request for Quotation</div>
+      <div class="hdr-c">${companyName}</div>
+    </div>
+    <div class="body">
+      <div class="rfqbox">
+        <div class="rfqlbl">رقم طلب التسعير / RFQ No.</div>
+        <div class="rfqval">${rfq.rfqNo}</div>
+      </div>
+      <div class="igrid">
+        <div class="ibox"><div class="ilbl">التاريخ / Date</div><div class="ival">${rfq.requestDate}</div></div>
+        <div class="ibox"><div class="ilbl">المورد / Supplier</div><div class="ival">${sup.companyName}</div></div>
+      </div>
+      <table>
+        <thead><tr>
+          <th style="width:36px">#</th>
+          <th>البيان / Description</th>
+          <th>Part No.</th>
+          <th>الوحدة</th>
+          <th>الكمية</th>
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+      ${rfq.notes ? `<div class="nbox"><div class="nlbl">ملاحظات</div><div class="ntxt">${rfq.notes}</div></div>` : ""}
+      ${senderName ? `<div class="sbox"><div class="slbl">من / From</div><div class="sval">${senderName}</div></div>` : ""}
+    </div>
+  </div>
+  <button class="pbtn no-print" onclick="window.print()">🖨️ طباعة / حفظ PDF</button>
+  <script>window.addEventListener('load',()=>setTimeout(()=>window.print(),600));<\/script>
+  </body></html>`;
+
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+  }
 function buildWhatsAppMessage(rfqNo: string, requestDate: string, companyName: string, items: RfqItem[], token?: string) {
   const lines = items.map((item, idx) =>
     `${idx + 1}. ${item.description}${item.partNo ? ` | رقم القطعة: ${item.partNo}` : ""} — الكمية: ${item.quantity} ${item.unit || ""}`.trim()
