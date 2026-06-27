@@ -26,7 +26,7 @@ export const customerQuotationItemsTable = pgTable("customer_quotation_items", {
   unitPrice: numeric("unit_price", { precision: 14, scale: 3 }).default("0"),
   customerNotes: text("customer_notes").default(""),
   internalCode: text("internal_code").default(""),
-  internalCodeScore: numeric("internal_code_score", { precision: 5, scale: 4 }).default("0"),
+  internalCodeScore: numeric("internal_code_score", { precision: 6, scale: 2 }).default("0"),
 });
 
 export type CustomerQuotation = typeof customerQuotationsTable.$inferSelect;
