@@ -794,6 +794,7 @@ export default function ItemsPage() {
                     <thead>
                       <tr className="bg-[#eef0f4] border-b border-slate-300 text-slate-600">
                         <th className="px-3 py-2.5 font-semibold border-l border-slate-200 w-8">#</th>
+                        <th className="px-3 py-2.5 font-semibold border-l border-slate-200 whitespace-nowrap">الكود الإداري</th>
                         <th className="px-3 py-2.5 font-semibold border-l border-slate-200">الوصف</th>
                         <th className="px-3 py-2.5 font-semibold border-l border-slate-200">كود العميل</th>
                         <th className="px-3 py-2.5 font-semibold border-l border-slate-200">PART NO</th>
@@ -809,20 +810,22 @@ export default function ItemsPage() {
                       {filtered.map((item, idx) => (
                         <tr key={item.id} className={`border-b border-slate-100 hover:bg-blue-50/30 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
                           <td className="px-3 py-2 text-slate-400 text-center border-l border-slate-100 font-mono">{idx + 1}</td>
+                          <td className="px-3 py-2 border-l border-slate-100 whitespace-nowrap">
+                            {item.internal_code ? (
+                              <span className="font-mono font-bold tracking-widest text-[#1e3a5f] bg-[#1e3a5f]/8 rounded-sm px-2 py-1 text-[11px] border border-[#1e3a5f]/20">
+                                {item.internal_code}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300 text-[11px]">—</span>
+                            )}
+                          </td>
                           <td className="px-3 py-2 border-l border-slate-100">
-                            <div className="flex items-start gap-2 flex-wrap">
-                              {item.internal_code && (
-                                <span className="shrink-0 font-mono font-bold tracking-widest text-[#1e3a5f] bg-[#1e3a5f]/8 rounded-sm px-2 py-0.5 text-[11px] border border-[#1e3a5f]/20 whitespace-nowrap">
-                                  {item.internal_code}
-                                </span>
-                              )}
-                              <button
-                                onClick={() => setSelectedDesc(item.description)}
-                                className="text-right text-[#1e3a5f] font-semibold hover:underline underline-offset-2 break-words text-start"
-                                title="اضغط لعرض السجل الكامل">
-                                {item.description || "—"}
-                              </button>
-                            </div>
+                            <button
+                              onClick={() => setSelectedDesc(item.description)}
+                              className="text-right text-[#1e3a5f] font-semibold hover:underline underline-offset-2 break-words text-start"
+                              title="اضغط لعرض السجل الكامل">
+                              {item.description || "—"}
+                            </button>
                           </td>
                           <td className="px-3 py-2 border-l border-slate-100 text-slate-500 font-mono">{item.customer_item_code || "—"}</td>
                           <td className="px-3 py-2 border-l border-slate-100 text-slate-500 font-mono">{item.part_no || "—"}</td>
