@@ -6,7 +6,7 @@ import {
   Building2, Save, Upload, X, Mail, MessageCircle,
   FileText, Landmark, Eye, EyeOff, Plus, Trash2, ShieldAlert,
   Users, Pencil, UserPlus, Lock, Power, PowerOff, CheckCircle,
-  XCircle, RefreshCw, Shield, AlertTriangle, KeyRound
+  XCircle, RefreshCw, Shield, AlertTriangle, KeyRound, Wand2, BrainCircuit
 } from "lucide-react";
 import { API_BASE } from "@/lib/auth-context";
 
@@ -29,6 +29,7 @@ interface CompanySettings {
   zatcaApiKey: string; zatcaCertificate: string; zatcaPrivateKey: string;
   bankName: string; bankIban: string; bankAccountNumber: string;
   bankSwift: string; bankApiUrl: string; bankApiKey: string; bankApiSecret: string;
+  geminiApiKey: string;
 }
 
 interface AppUser {
@@ -60,7 +61,7 @@ function parsePerms(raw: string | null): Permissions {
   try { return raw ? JSON.parse(raw) : {}; } catch { return {}; }
 }
 
-type Tab = "company" | "sensitive" | "users";
+type Tab = "company" | "sensitive" | "users" | "coding";
 
 const emptyUserForm = {
   email: "", fullName: "", password: "",
@@ -69,9 +70,10 @@ const emptyUserForm = {
 };
 
 const TAB_CONFIG: { key: Tab; label: string; icon: React.ReactNode }[] = [
-  { key: "company",   label: "بيانات الشركة",   icon: <Building2 className="h-4 w-4" /> },
+  { key: "company",   label: "بيانات الشركة",    icon: <Building2 className="h-4 w-4" /> },
   { key: "sensitive", label: "الإعدادات التقنية", icon: <ShieldAlert className="h-4 w-4" /> },
-  { key: "users",     label: "المستخدمون",        icon: <Users className="h-4 w-4" /> },
+  { key: "users",     label: "المستخدمون",         icon: <Users className="h-4 w-4" /> },
+  { key: "coding",    label: "التكويد الذكي",     icon: <BrainCircuit className="h-4 w-4" /> },
 ];
 
 export default function CompanySettingsPage() {
@@ -79,6 +81,9 @@ export default function CompanySettingsPage() {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("company");
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
+  const [recodesConfirm, setRecodesConfirm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
@@ -119,6 +124,29 @@ export default function CompanySettingsPage() {
 
   function set(field: keyof CompanySettings, value: string) { setForm(prev => ({ ...prev, [field]: value })); }
   function handleSave() { mutation.mutate({ ...form, whatsappTemplates: JSON.stringify(templates) }); }
+
+  async function runBackfill(force = false) {
+    setBackfilling(true);
+    setBackfillMsg(null);
+    setRecodesConfirm(false);
+    // Save geminiApiKey first so backfill endpoint can read it
+    if (form.geminiApiKey) await mutation.mutateAsync({ ...form, whatsappTemplates: JSON.stringify(templates) }).catch(() => {});
+    try {
+      const r = await fetch(`${API_BASE}/api/items/backfill-codes`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ force }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "خطأ");
+      const note = force ? " (إعادة كاملة)" : "";
+      setBackfillMsg(`✓ تم تكويد ${data.coded} بند من أصل ${data.total} (فشل: ${data.failed})${note}`);
+    } catch (err: any) {
+      setBackfillMsg(`✗ ${err.message}`);
+    } finally {
+      setBackfilling(false);
+    }
+  }
   function toggleSecret(key: string) { setShowSecrets(prev => ({ ...prev, [key]: !prev[key] })); }
   function addTemplate() { setTemplates(prev => [...prev, { name: "", language: "ar", body: "" }]); }
   function updateTemplate(i: number, field: keyof WhatsAppTemplate, value: string) { setTemplates(prev => prev.map((t, idx) => idx === i ? { ...t, [field]: value } : t)); }
@@ -284,7 +312,7 @@ export default function CompanySettingsPage() {
               <h1 className="text-lg font-bold text-[#1e3a5f] tracking-tight">إعدادات النظام</h1>
               <p className="text-xs text-slate-500 mt-0.5">تخصيص بيانات الشركة والنظام وإدارة المستخدمين</p>
             </div>
-            {(activeTab === "company" || activeTab === "sensitive") && (
+            {(activeTab === "company" || activeTab === "sensitive" || activeTab === "coding") && (
               <div className="flex items-center gap-2">
                 {saved && (
                   <span className="flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-3 py-1.5">
@@ -459,6 +487,85 @@ export default function CompanySettingsPage() {
                   <div className="col-span-2">
                     <SapSecretField label="Bank API Secret" fieldKey="bankSecret" value={form.bankApiSecret ?? ""} onChange={v => set("bankApiSecret", v)} show={!!showSecrets["bankSecret"]} onToggle={() => toggleSecret("bankSecret")} />
                   </div>
+                </div>
+              </SapSection>
+            </div>
+          )}
+
+          {/* ── التكويد الذكي ── */}
+          {activeTab === "coding" && (
+            <div className="space-y-4 max-w-2xl">
+              <SapSection title="محرك الذكاء الاصطناعي (Gemini)" icon={<BrainCircuit className="h-4 w-4 text-violet-600" />}>
+                <div className="space-y-4">
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    بعد إدخال المفتاح واضغط "حفظ التعديلات"، سيستخدم النظام Gemini لاستخراج خصائص المنتج (ماركة، فئة، جهد، تيار…) بدقة أعلى من القواعد الثابتة.
+                    يمكن الحصول على مفتاح مجاني من <a href="https://aistudio.google.com" target="_blank" rel="noreferrer" className="text-violet-600 underline">Google AI Studio</a>.
+                  </p>
+                  <SapSecretField
+                    label="Gemini API Key"
+                    fieldKey="geminiKey"
+                    value={form.geminiApiKey ?? ""}
+                    onChange={v => set("geminiApiKey", v)}
+                    show={!!showSecrets["geminiKey"]}
+                    onToggle={() => toggleSecret("geminiKey")}
+                  />
+                  {form.geminiApiKey?.trim() ? (
+                    <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-3 py-2">
+                      <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+                      المفتاح مضبوط — سيُفعَّل Gemini عند التكويد
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      بدون مفتاح — سيُستخدم المحرك القائم على القواعد فقط
+                    </div>
+                  )}
+                </div>
+              </SapSection>
+
+              <SapSection title="تكويد البنود" icon={<Wand2 className="h-4 w-4 text-[#0064d9]" />}>
+                <div className="space-y-4">
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    يعطي النظام لكل بند رقماً إدارياً موحداً (مثل <code className="font-mono bg-slate-100 px-1 rounded">000001</code>)
+                    بناءً على Part No أولاً ثم وصف المنتج. البنود المتطابقة تحصل على نفس الرقم.
+                  </p>
+
+                  <div className="flex gap-3 flex-wrap">
+                    <button
+                      onClick={() => runBackfill(false)}
+                      disabled={backfilling}
+                      className="flex items-center gap-2 rounded bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white text-xs font-semibold px-4 py-2 transition-colors"
+                    >
+                      <Wand2 className="h-3.5 w-3.5" />
+                      {backfilling ? "جاري التكويد…" : "كود البنود الجديدة"}
+                    </button>
+
+                    {!recodesConfirm ? (
+                      <button
+                        onClick={() => setRecodesConfirm(true)}
+                        disabled={backfilling}
+                        className="flex items-center gap-2 rounded bg-rose-700 hover:bg-rose-800 disabled:opacity-60 text-white text-xs font-semibold px-4 py-2 transition-colors"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        إعادة تكويد الكل
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2 bg-rose-50 border border-rose-300 rounded px-3 py-2 text-xs">
+                        <span className="text-rose-700 font-semibold">سيتم مسح جميع الأكواد والبدء من الصفر. تأكيد؟</span>
+                        <button onClick={() => runBackfill(true)} disabled={backfilling}
+                          className="bg-rose-700 hover:bg-rose-800 text-white font-bold px-2 py-0.5 rounded disabled:opacity-60">
+                          {backfilling ? "…" : "نعم"}
+                        </button>
+                        <button onClick={() => setRecodesConfirm(false)} className="text-slate-500 hover:text-slate-700">إلغاء</button>
+                      </div>
+                    )}
+                  </div>
+
+                  {backfillMsg && (
+                    <div className={`text-xs px-3 py-2 rounded border font-medium ${backfillMsg.startsWith("✓") ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"}`}>
+                      {backfillMsg}
+                    </div>
+                  )}
                 </div>
               </SapSection>
             </div>
