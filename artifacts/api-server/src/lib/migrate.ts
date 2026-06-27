@@ -567,15 +567,6 @@ import { pool } from "@workspace/db";
             ALTER TABLE supplier_quotation_suppliers ADD COLUMN IF NOT EXISTS payment_terms TEXT DEFAULT '';
             ALTER TABLE supplier_quotation_suppliers ADD COLUMN IF NOT EXISTS offer_validity_days INTEGER;
           `);
-
-          
-            // ── One-time data cleanup ────────────────────────────────────────────────
-            // Delete specific invoice and customer order as requested
-            await client.query(`
-              DELETE FROM invoices WHERE invoice_no = 'INV-20260626-6630';
-              DELETE FROM customer_orders WHERE order_no = 'CO-20260620-1696';
-            `);
-
             console.log("[migrate] Schema ready");
     } finally {
       client.release();
