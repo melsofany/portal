@@ -4,6 +4,28 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
+function getAuthToken(): string | null {
+  try { return localStorage.getItem('auth_token'); } catch { return null; }
+}
+
+function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const token = getAuthToken();
+  const headers: Record<string, string> = {
+    ...(options.headers as Record<string, string> ?? {}),
+  };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return fetch(url, { credentials: 'include', ...options, headers });
+}
+
+async function authFetchJson<T>(url: string, options: RequestInit = {}): Promise<T> {
+  const res = await authFetch(url, options);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'خطأ في الاتصال' }));
+    throw new Error((err as any).error ?? 'خطأ في الاتصال');
+  }
+  return res.json() as Promise<T>;
+}
+
 import {
   Send, FileText, Mail, MessageSquare, Trash2, ChevronDown, ChevronUp,
   Search, CheckSquare, Square, X, ArrowRight, ArrowLeft,
@@ -221,7 +243,7 @@ async function sendWhatsApp(supplier: RfqSupplier | Supplier, rfqNo: string, req
   if (!raw) { alert("لا يوجد رقم واتساب أو هاتف لهذا المورد"); return "error"; }
   const msg = buildWhatsAppMessage(rfqNo, requestDate, supplier.companyName, items, token);
   try {
-    const res = await fetch(`${API_BASE}/api/whatsapp/send`, {
+    const res = await authFetch(`${API_BASE}/api/whatsapp/send`, {
       method: "POST", credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ to: raw, message: msg }),
@@ -275,7 +297,7 @@ function TH({ children, className = "" }: { children: React.ReactNode; className
 function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string; onClose: () => void }) {
   const { data, isLoading, error } = useQuery<AnalysisData>({
     queryKey: ['rfq-analysis', rfqId],
-    queryFn: () => fetch(`${API_BASE}/api/supplier-quotations/${rfqId}/analysis`, { credentials: 'include' }).then(r => r.json()),
+    queryFn: () => authFetchJson<AnalysisData>(`${API_BASE}/api/supplier-quotations/${rfqId}/analysis`),
   });
 
   const submittedSuppliers = data?.suppliers.filter(s => s.responseStatus === 'submitted') ?? [];
@@ -603,7 +625,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
     if (!searchTerm.trim()) return;
     setSearching(true); setSearchError(""); setFoundCQ(null); setSearchResults([]);
     try {
-      const res = await fetch(`${API_BASE}/api/supplier-quotations/search-cq?q=${encodeURIComponent(searchTerm.trim())}`, { credentials: "include" });
+      const res = await authFetch(`${API_BASE}/api/supplier-quotations/search-cq?q=${encodeURIComponent(searchTerm.trim())}`);
       const data: any[] = await res.json();
       if (!data || data.length === 0) { setSearchError("لم يتم العثور على طلب بهذا الرقم"); return; }
       if (data.length === 1) { await handleSelectCQ(data[0].id); }
@@ -614,7 +636,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
 
   async function handleSelectCQ(id: number) {
     try {
-      const res = await fetch(`${API_BASE}/api/customer-quotations/${id}`, { credentials: "include" });
+      const res = await authFetch(`${API_BASE}/api/customer-quotations/${id}`);
       const data = await res.json();
       setFoundCQ(data);
       setSearchResults([]);
@@ -626,8 +648,8 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
     if (suppliersLoaded) return;
     try {
       const [suppRes, catRes] = await Promise.all([
-        fetch(`${API_BASE}/api/suppliers`, { credentials: "include" }).then(r => r.json()),
-        fetch(`${API_BASE}/api/supplier-categories`, { credentials: "include" }).then(r => r.json()),
+        authFetchJson(`${API_BASE}/api/suppliers`),
+        authFetchJson(`${API_BASE}/api/supplier-categories`),
       ]);
       setSuppliers(suppRes.filter((s: Supplier) => s.status === "نشط"));
       setCategories(catRes);
@@ -651,7 +673,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
     if (itemsToSend.length === 0) { alert("يجب اختيار بند واحد على الأقل من البنود"); return; }
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE}/api/supplier-quotations`, {
+      const res = await authFetch(`${API_BASE}/api/supplier-quotations`, {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -677,7 +699,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
     setSendAllStatus("sending");
     setSendAllResults([]);
     try {
-      const res = await fetch(`${API_BASE}/api/supplier-quotations/${rfqId}/send-all`, {
+      const res = await authFetch(`${API_BASE}/api/supplier-quotations/${rfqId}/send-all`, {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ baseUrl: window.location.origin }),
@@ -1215,7 +1237,7 @@ function AddSupplierModal({ rfq, apiBase, onClose, onAdded }: {
   const [error, setError] = React.useState('');
 
   React.useEffect(() => {
-    fetch(`${apiBase}/api/suppliers`, { credentials: 'include' })
+    authFetch(`${apiBase}/api/suppliers`)
       .then(r => r.json())
       .then((all: Supplier[]) => {
         const existingIds = new Set(rfq.suppliers.map(s => s.supplierId));
@@ -1257,7 +1279,7 @@ function AddSupplierModal({ rfq, apiBase, onClose, onAdded }: {
     const errors: string[] = [];
     await Promise.all([...selectedIds].map(async supplierId => {
       try {
-        const r = await fetch(`${apiBase}/api/supplier-quotations/${rfq.id}/suppliers`, {
+        const r = await authFetch(`${apiBase}/api/supplier-quotations/${rfq.id}/suppliers`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
           body: JSON.stringify({ supplierId }),
         });
@@ -1392,7 +1414,7 @@ export default function SupplierQuotationsPage() {
 
   const { data: rfqs = [], isLoading } = useQuery<Rfq[]>({
     queryKey: ["supplier-quotations"],
-    queryFn: () => fetch(`${API_BASE}/api/supplier-quotations`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => authFetchJson<Rfq[]>(`${API_BASE}/api/supplier-quotations`),
   });
 
   const filteredRfqs = React.useMemo(() => {
@@ -1410,7 +1432,7 @@ export default function SupplierQuotationsPage() {
   }, [rfqs, listSearch]);
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => fetch(`${API_BASE}/api/supplier-quotations/${id}`, { method: "DELETE", credentials: "include" }),
+    mutationFn: (id: number) => authFetch(`${API_BASE}/api/supplier-quotations/${id}`, { method: 'DELETE' }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["supplier-quotations"] }),
   });
 
