@@ -23,7 +23,6 @@ import EmployeesPage from "./pages/employees";
 import WhatsAppPage from "./pages/whatsapp";
 import PrivacyPolicyPage from "./pages/privacy-policy";
 import CompanySettingsPage from "./pages/company-settings";
-  import ItemCodingPage from "./pages/item-coding";
 
 setBaseUrl(API_BASE || null);
 setAuthTokenGetter(() => {
@@ -92,7 +91,6 @@ function AppRoutes() {
       <Route path="/customers"           component={() => <ProtectedRoute component={CustomersPage}            permission="customers"      />} />
       <Route path="/suppliers"           component={() => <ProtectedRoute component={SuppliersPage}            permission="suppliers"      />} />
       <Route path="/items"               component={() => <ProtectedRoute component={ItemsPage}                permission="suppliers"      />} />
-        <Route path="/item-coding"         component={() => <ProtectedRoute component={ItemCodingPage}           permission="quotations"     />} />
       <Route path="/customer-quotations" component={() => <ProtectedRoute component={CustomerQuotationsPage}   permission="quotations"     />} />
       <Route path="/supplier-quotations" component={() => <ProtectedRoute component={SupplierQuotationsPage}   permission="quotations"     />} />
       <Route path="/customer-orders"     component={() => <ProtectedRoute component={CustomerOrdersPage}       permission="customerOrders" />} />

@@ -19,7 +19,6 @@ import { Router, type IRouter } from "express";
     import dashboardRouter from "./dashboard";
     import employeesRouter from "./employees";
     import usersRouter from "./users";
-    import itemCodingRouter from "./item-coding";
       import { requireAuth, requirePermission, requireAdmin } from "../middlewares/authMiddleware";
       import { eq } from "drizzle-orm";
         import { db } from "@workspace/db";
@@ -93,7 +92,6 @@ import { Router, type IRouter } from "express";
       router.use("/delivery-permits",       requirePermission("customerOrders"), deliveryPermitsRouter);
       router.use("/items",                  requirePermission("suppliers"),      itemsRouter);
       router.use("/dashboard",              requirePermission("dashboard"),      dashboardRouter);
-      router.use("/item-coding",            requirePermission("quotations"),     itemCodingRouter);
       // Any authenticated user can read their own employee record (used by PDF generation etc.)
         router.get("/employees/me", async (req, res) => {
           try {
