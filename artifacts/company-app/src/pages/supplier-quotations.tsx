@@ -1065,7 +1065,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                           {/* Action buttons */}
                           <div className="flex gap-1 shrink-0">
                             <button className="flex items-center gap-0.5 px-2 py-0.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[10px] rounded-sm transition-colors"
-                              onClick={() => downloadRfqPdf(rfq.id, sup.supplierId)}>
+                              onClick={() => downloadRfqPdf(rfq, sup)}>
                               <FileText className="h-3 w-3" /> PDF
                             </button>
                             <button className="flex items-center gap-0.5 px-2 py-0.5 border border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-700 text-[10px] rounded-sm transition-colors"
@@ -1611,7 +1611,7 @@ export default function SupplierQuotationsPage() {
                                               <td className="px-2 py-1.5 text-center">
                                                 <div className="flex items-center justify-center gap-1">
                                                   <button title="PDF"
-                                                    onClick={() => downloadRfqPdf(rfq.id, sup.supplierId)}
+                                                    onClick={() => downloadRfqPdf(rfq, sup)}
                                                     className="p-1 border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 rounded-sm transition-colors">
                                                     <FileText className="h-3 w-3" />
                                                   </button>
