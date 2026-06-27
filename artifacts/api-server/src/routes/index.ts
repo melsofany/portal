@@ -22,7 +22,7 @@ import { Router, type IRouter } from "express";
     import { requireAuth, requirePermission, requireAdmin } from "../middlewares/authMiddleware";
     import { eq } from "drizzle-orm";
       import { db } from "@workspace/db";
-      import { companySettingsTable, employeesTable } from "@workspace/db/schema";
+      import { companySettingsTable, employeesTable, usersTable } from "@workspace/db/schema";
 
     const router: IRouter = Router();
 
@@ -84,13 +84,17 @@ import { Router, type IRouter } from "express";
     router.use("/delivery-permits",       requirePermission("customerOrders"), deliveryPermitsRouter);
     router.use("/items",                  requirePermission("suppliers"),      itemsRouter);
     router.use("/dashboard",              requirePermission("dashboard"),      dashboardRouter);
-    // Any authenticated user can read their own employee record (for PDF generation etc.)
+    // Any authenticated user can read their own employee record (used by PDF generation etc.)
       router.get("/employees/me", async (req, res) => {
         try {
           const userId = req.auth?.userId;
           if (!userId) return res.json({ phone: "", fullName: "" });
+          // Get employeeId from usersTable (usersTable.employeeId → employeesTable.id)
+          const [user] = await db.select({ employeeId: usersTable.employeeId })
+            .from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+          if (!user?.employeeId) return res.json({ phone: "", fullName: "" });
           const [emp] = await db.select({ phone: employeesTable.phone, fullName: employeesTable.fullName })
-            .from(employeesTable).where(eq(employeesTable.userId, userId)).limit(1);
+            .from(employeesTable).where(eq(employeesTable.id, user.employeeId)).limit(1);
           res.json(emp ?? { phone: "", fullName: "" });
         } catch { res.json({ phone: "", fullName: "" }); }
       });
