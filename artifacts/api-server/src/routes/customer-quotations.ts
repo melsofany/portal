@@ -25,55 +25,68 @@ function generateQuotationNo(): string {
 }
 
 /**
- * Auto-match a single item description against canonical_items.
- * If a confident match is found (score >= 3), returns the existing code.
- * If no match, automatically creates a new canonical item and returns its new code.
+ * Auto-match an item against canonical_items using Part No first, then description.
+ * Matching priority:
+ *   1. Exact Part No match (strongest signal — different part nos = different items)
+ *   2. Exact description match
+ *   3. High-confidence fuzzy match (score ≥ 10)
+ *   4. None found → auto-create new canonical item
  */
-async function autoCodeItem(description: string): Promise<{ code: string; score: number }> {
+async function autoCodeItem(description: string, partNo?: string): Promise<{ code: string; score: number }> {
   if (!description.trim()) return { code: "", score: 0 };
   const desc = description.trim().toLowerCase();
+  const pno  = partNo?.trim() ?? "";
+
   try {
-    // Step 1: Try to find a match in existing canonical_items
+    // Ensure part_no column exists
+    await pool.query(`ALTER TABLE canonical_items ADD COLUMN IF NOT EXISTS part_no TEXT NOT NULL DEFAULT ''`).catch(() => {});
+
+    // Step 1: exact Part No match — most reliable differentiator
+    if (pno) {
+      const { rows: pnoRows } = await pool.query<{ internal_code: string }>(
+        `SELECT internal_code FROM canonical_items WHERE LOWER(TRIM(part_no)) = LOWER($1) LIMIT 1`,
+        [pno]
+      );
+      if (pnoRows[0]) return { code: pnoRows[0].internal_code, score: 20 };
+    }
+
+    // Step 2: description similarity (raised threshold to 10 to prevent false matches
+    //          from shared substring like "SOUTHBEND OVEN OLYMPIC GOLD")
     const { rows } = await pool.query<{ internal_code: string; score: number }>(`
       SELECT internal_code,
         (
           CASE
             WHEN LOWER(description_en) = $2 THEN 20
             WHEN LOWER(description_ar) = $2 THEN 20
-            WHEN LOWER(description_en) ILIKE $1 THEN 12
-            WHEN LOWER(description_ar) ILIKE $1 THEN 12
-            WHEN $2 ILIKE '%' || LOWER(description_en) || '%' AND LENGTH(description_en) > 4 THEN 8
-            WHEN $2 ILIKE '%' || LOWER(description_ar) || '%' AND LENGTH(description_ar) > 4 THEN 8
+            WHEN LOWER(description_en) ILIKE $1 THEN 14
+            WHEN LOWER(description_ar) ILIKE $1 THEN 14
+            WHEN $2 ILIKE '%' || LOWER(description_en) || '%'
+              AND LENGTH(description_en) > 8 THEN 10
+            WHEN $2 ILIKE '%' || LOWER(description_ar) || '%'
+              AND LENGTH(description_ar) > 8 THEN 10
             ELSE 0
           END
           + COALESCE((
-              SELECT COUNT(*)::int
-              FROM unnest(keywords) k
-              WHERE LENGTH(k) > 2 AND $2 ILIKE '%' || LOWER(k) || '%'
+              SELECT COUNT(*)::int FROM unnest(keywords) k
+              WHERE LENGTH(k) > 3 AND $2 ILIKE '%' || LOWER(k) || '%'
             ), 0)
         ) AS score
       FROM canonical_items
       WHERE
-        LOWER(description_en) ILIKE $1
-        OR LOWER(description_ar) ILIKE $1
+        LOWER(description_en) ILIKE $1 OR LOWER(description_ar) ILIKE $1
         OR $2 ILIKE '%' || LOWER(description_en) || '%'
         OR $2 ILIKE '%' || LOWER(description_ar) || '%'
-        OR EXISTS (
-          SELECT 1 FROM unnest(keywords) k
-          WHERE LENGTH(k) > 2 AND $2 ILIKE '%' || LOWER(k) || '%'
-        )
-      ORDER BY score DESC
-      LIMIT 1
+      ORDER BY score DESC LIMIT 1
     `, [`%${desc}%`, desc]);
 
-    // Confident match found — reuse existing code
-    if (rows[0] && rows[0].score >= 3) {
+    if (rows[0] && rows[0].score >= 10) {
       return { code: rows[0].internal_code, score: rows[0].score };
     }
 
-    // Step 2: No match — auto-create a new canonical item with a generated code
+    // Step 3: No confident match → auto-create new canonical item
     const fp = extractFingerprint(description.trim());
-    const hash = fingerprintHash(fp);
+    if (pno) fp.partNo = pno;
+    const hash     = fingerprintHash(fp);
     const category = (fp.category as string | undefined)?.trim() ?? "";
     const brand    = (fp.brand    as string | undefined)?.trim() ?? "";
     const keywords = Array.isArray(fp.keywords) ? fp.keywords as string[] : [];
@@ -81,10 +94,12 @@ async function autoCodeItem(description: string): Promise<{ code: string; score:
 
     await pool.query(`
       INSERT INTO canonical_items
-        (internal_code, brand, category, description_en, description_ar, keywords, notes, fingerprint, fingerprint_hash)
-      VALUES ($1, $2, $3, $4, '', $5, '', $6, $7)
+        (internal_code, part_no, brand, category, description_en, description_ar,
+         keywords, notes, fingerprint, fingerprint_hash)
+      VALUES ($1,$2,$3,$4,$5,'',$6,'',$7,$8)
       ON CONFLICT (internal_code) DO NOTHING
-    `, [newCode, brand, category, description.trim(), keywords, JSON.stringify(fp), hash]);
+    `, [newCode, pno, brand, category, description.trim(), keywords,
+        JSON.stringify(fp), hash]);
 
     return { code: newCode, score: 0 };
   } catch {
@@ -300,9 +315,11 @@ router.post("/", async (req, res) => {
       })
       .returning();
 
-    // Auto-code each item description in parallel
+    // Auto-code each item description in parallel (Part No passed as primary key)
     const codingResults = await Promise.all(
-      (items as any[]).map((item) => autoCodeItem(item.description?.trim() ?? ""))
+      (items as any[]).map((item) =>
+        autoCodeItem(item.description?.trim() ?? "", item.partNo?.trim() || undefined)
+      )
     );
 
     const itemRows = (items as any[]).map((item, idx) => ({
@@ -371,9 +388,11 @@ router.put("/:id", async (req, res) => {
 
     await db.delete(customerQuotationItemsTable).where(eq(customerQuotationItemsTable.quotationId, id));
 
-    // Auto-code each item description in parallel
+    // Auto-code each item description in parallel (Part No passed as primary key)
     const codingResults = await Promise.all(
-      (items as any[]).map((item) => autoCodeItem(item.description?.trim() ?? ""))
+      (items as any[]).map((item) =>
+        autoCodeItem(item.description?.trim() ?? "", item.partNo?.trim() || undefined)
+      )
     );
 
     const itemRows = (items as any[]).map((item, idx) => ({
