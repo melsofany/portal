@@ -43,6 +43,9 @@ import { pgTable, serial, text } from "drizzle-orm/pg-core";
     bankApiUrl: text("bank_api_url").default(""),
     bankApiKey: text("bank_api_key").default(""),
     bankApiSecret: text("bank_api_secret").default(""),
+
+    // ── التكويد الذكي ──
+    geminiApiKey: text("gemini_api_key").default(""),
   });
 
   export type CompanySettings = typeof companySettingsTable.$inferSelect;
