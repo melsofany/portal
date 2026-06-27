@@ -153,8 +153,8 @@ import crypto from "crypto";
 
   // ── Gemini fingerprint extractor ───────────────────────────────────────────
 
-  export async function geminiExtractFingerprint(text: string): Promise<ProductFingerprint> {
-    const apiKey = process.env.GEMINI_API_KEY;
+  export async function geminiExtractFingerprint(text: string, explicitKey?: string): Promise<ProductFingerprint> {
+    const apiKey = explicitKey || process.env.GEMINI_API_KEY;
     if (!apiKey) return extractFingerprint(text);
 
     try {
