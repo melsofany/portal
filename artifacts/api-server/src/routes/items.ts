@@ -150,6 +150,18 @@ import { Router } from "express";
           await pool.query(`DELETE FROM canonical_items`);
         }
 
+        // Read Gemini API key from settings (fallback to env var)
+        let geminiKey: string | undefined;
+        try {
+          const { rows: sRows } = await pool.query<{ gemini_api_key: string }>(
+            `SELECT gemini_api_key FROM company_settings LIMIT 1`
+          );
+          geminiKey = sRows[0]?.gemini_api_key?.trim() || process.env.GEMINI_API_KEY;
+        } catch {
+          geminiKey = process.env.GEMINI_API_KEY;
+        }
+        if (geminiKey) process.env.GEMINI_API_KEY = geminiKey;
+
         const { rows: uncoded } = await pool.query<{ id: number; description: string; part_no: string }>(`
           SELECT id, description, COALESCE(part_no,'') AS part_no
           FROM customer_quotation_items
