@@ -20,6 +20,7 @@ import React, { ReactNode, useState, useRef, useEffect } from "react";
       { label: "العملاء",              path: "/customers",           icon: Users,           permission: "customers"      },
       { label: "الموردين",             path: "/suppliers",           icon: Truck,           permission: "suppliers"      },
       { label: "البنود",               path: "/items",               icon: List,            permission: "suppliers"      },
+      { label: "تكويد البنود",         path: "/item-coding",         icon: List,            permission: "quotations"     },
       { label: "طلبات تسعير العملاء", path: "/customer-quotations", icon: FileText,        permission: "quotations"     },
       { label: "طلبات تسعير الموردين",path: "/supplier-quotations", icon: FileText,        permission: "quotations"     },
       { label: "أوامر شراء العملاء",  path: "/customer-orders",     icon: ShoppingCart,    permission: "customerOrders" },
