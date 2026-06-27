@@ -49,9 +49,9 @@ import { Router } from "express";
     router.get("/public", async (req, res) => {
       try {
         const settings = await ensureSettings();
-        res.json({ name: settings.name, logoUrl: settings.logoUrl });
+        res.json({ name: settings.name, logoUrl: settings.logoUrl, phone: settings.phone, address: settings.address, email: settings.email });
       } catch {
-        res.json({ name: "", logoUrl: "" });
+        res.json({ name: "", logoUrl: "", phone: "", address: "", email: "" });
       }
     });
 
