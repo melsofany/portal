@@ -567,7 +567,14 @@ import { pool } from "@workspace/db";
             ALTER TABLE supplier_quotation_suppliers ADD COLUMN IF NOT EXISTS payment_terms TEXT DEFAULT '';
             ALTER TABLE supplier_quotation_suppliers ADD COLUMN IF NOT EXISTS offer_validity_days INTEGER;
           `);
-            console.log("[migrate] Schema ready");
+  
+            // Fix internal_code_score column precision (was numeric(5,4), must be numeric(6,2) for scores ≤20)
+            await client.query(`
+              ALTER TABLE customer_quotation_items
+                ALTER COLUMN internal_code_score TYPE NUMERIC(6,2);
+            `).catch(() => {});
+  
+          console.log("[migrate] Schema ready");
     } finally {
       client.release();
     }
