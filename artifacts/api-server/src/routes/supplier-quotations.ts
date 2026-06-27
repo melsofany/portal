@@ -166,7 +166,9 @@ async function generateRfqPdf(opts: {
   const { rfqNo, requestDate, companyName, supplierName, items, senderName, senderPhone, notes } = opts;
 
   // Dynamic import so esbuild can resolve at runtime
-  const PDFDocument = (await import("pdfkit" as any)).default as any;
+  // Use require() via the globalThis.require set in the esbuild banner (more reliable than dynamic import for CJS modules)
+    const _req = (globalThis as any).require as NodeRequire;
+    const PDFDocument = _req("pdfkit") as any;
   const fontBuffer = await getArabicFont();
 
   return new Promise<Buffer>((resolve, reject) => {
