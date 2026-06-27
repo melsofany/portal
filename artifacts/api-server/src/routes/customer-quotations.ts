@@ -11,6 +11,7 @@ import {
   suppliersTable,
 } from "@workspace/db/schema";
 import { eq, desc, inArray, and } from "drizzle-orm";
+import { extractFingerprint, fingerprintHash, nextInternalCode } from "../lib/item-coding-engine";
 
 const router = Router();
 
@@ -25,13 +26,14 @@ function generateQuotationNo(): string {
 
 /**
  * Auto-match a single item description against canonical_items.
- * Returns { code, score } or { code: "", score: 0 } if no confident match found.
+ * If a confident match is found (score >= 3), returns the existing code.
+ * If no match, automatically creates a new canonical item and returns its new code.
  */
 async function autoCodeItem(description: string): Promise<{ code: string; score: number }> {
   if (!description.trim()) return { code: "", score: 0 };
   const desc = description.trim().toLowerCase();
   try {
-    // Ensure canonical_items table exists before querying
+    // Step 1: Try to find a match in existing canonical_items
     const { rows } = await pool.query<{ internal_code: string; score: number }>(`
       SELECT internal_code,
         (
@@ -64,8 +66,27 @@ async function autoCodeItem(description: string): Promise<{ code: string; score:
       LIMIT 1
     `, [`%${desc}%`, desc]);
 
-    if (!rows[0] || rows[0].score < 3) return { code: "", score: 0 };
-    return { code: rows[0].internal_code, score: rows[0].score };
+    // Confident match found — reuse existing code
+    if (rows[0] && rows[0].score >= 3) {
+      return { code: rows[0].internal_code, score: rows[0].score };
+    }
+
+    // Step 2: No match — auto-create a new canonical item with a generated code
+    const fp = extractFingerprint(description.trim());
+    const hash = fingerprintHash(fp);
+    const category = (fp.category as string | undefined)?.trim() ?? "";
+    const brand    = (fp.brand    as string | undefined)?.trim() ?? "";
+    const keywords = Array.isArray(fp.keywords) ? fp.keywords as string[] : [];
+    const newCode  = await nextInternalCode(category || undefined);
+
+    await pool.query(`
+      INSERT INTO canonical_items
+        (internal_code, brand, category, description_en, description_ar, keywords, notes, fingerprint, fingerprint_hash)
+      VALUES ($1, $2, $3, $4, '', $5, '', $6, $7)
+      ON CONFLICT (internal_code) DO NOTHING
+    `, [newCode, brand, category, description.trim(), keywords, JSON.stringify(fp), hash]);
+
+    return { code: newCode, score: 0 };
   } catch {
     return { code: "", score: 0 };
   }
