@@ -429,7 +429,7 @@ function CodingTab() {
       <div className="grid grid-cols-3 gap-3 text-center">
         {[
           { range: "≥ 95%",  label: "ربط تلقائي",  desc: "نفس المنتج بالتأكيد",  dot: "bg-emerald-500", bg: "bg-emerald-50 border-emerald-200" },
-          { range: "70–94%", label: "يحتاج تأكيد", desc: "قد يكون نفس المنتج",   dot: "bg-amber-400",   bg: "bg-amber-50 border-amber-200"     },
+          { range: "80–94%", label: "يحتاج تأكيد", desc: "قد يكون نفس المنتج",   dot: "bg-amber-400",   bg: "bg-amber-50 border-amber-200"     },
           { range: "< 70%",  label: "كود جديد",    desc: "منتج مختلف — كود جديد", dot: "bg-blue-500",    bg: "bg-blue-50 border-blue-200"       },
         ].map((t) => (
           <div key={t.range} className={`border rounded-sm p-3 ${t.bg}`}>
