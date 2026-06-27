@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import AppLayout from "@/components/AppLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
-import { Search, Package, X, ChevronLeft, Wand2 } from "lucide-react";
+import { Search, Package, X, ChevronLeft } from "lucide-react";
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
 
@@ -659,9 +659,7 @@ export default function ItemsPage() {
   const [search,       setSearch]       = useState("");
   const [selectedDesc, setSelectedDesc] = useState<string | null>(null);
   const [tab,          setTab]          = useState<"items" | "coding">("items");
-  const [backfilling,  setBackfilling]  = useState(false);
   const [backfillMsg,  setBackfillMsg]  = useState<string | null>(null);
-  const [recodesConfirm, setRecodesConfirm] = useState(false);
 
   const fetchItems = () => {
     fetch(`${API_BASE}/api/items`, { credentials: "include" })
@@ -672,30 +670,6 @@ export default function ItemsPage() {
 
   useEffect(() => { fetchItems(); }, []);
 
-  const runBackfill = async (force = false) => {
-    setBackfilling(true);
-    setBackfillMsg(null);
-    setRecodesConfirm(false);
-    try {
-      const token = localStorage.getItem("auth_token");
-      const r = await fetch(`${API_BASE}/api/items/backfill-codes`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ force }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "خطأ");
-      const resetNote = force ? " (تمت إعادة الضبط الكامل)" : "";
-      setBackfillMsg(`✓ تم تكويد ${data.coded} بند من أصل ${data.total} (فشل: ${data.failed})${resetNote}`);
-      setLoading(true);
-      fetchItems();
-    } catch (err: any) {
-      setBackfillMsg(`✗ ${err.message}`);
-    } finally {
-      setBackfilling(false);
-    }
-  };
 
   const filtered = items.filter(item => {
     if (!search.trim()) return true;
@@ -728,44 +702,6 @@ export default function ItemsPage() {
               <span className="text-xs bg-[#1e3a5f] text-white px-3 py-1 rounded-sm font-semibold tabular-nums">
                 {filtered.length} بند
               </span>
-            )}
-            {tab === "items" && !recodesConfirm && (
-              <>
-                <button
-                  onClick={() => runBackfill(false)}
-                  disabled={backfilling}
-                  className="flex items-center gap-1.5 rounded-sm bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white text-xs font-semibold px-3 py-1.5 transition-colors"
-                >
-                  <Wand2 className="h-3.5 w-3.5" />
-                  {backfilling ? "جاري التكويد…" : "كود البنود الجديدة"}
-                </button>
-                <button
-                  onClick={() => setRecodesConfirm(true)}
-                  disabled={backfilling}
-                  className="flex items-center gap-1.5 rounded-sm bg-rose-700 hover:bg-rose-800 disabled:opacity-60 text-white text-xs font-semibold px-3 py-1.5 transition-colors"
-                >
-                  <Wand2 className="h-3.5 w-3.5" />
-                  إعادة تكويد الكل
-                </button>
-              </>
-            )}
-            {tab === "items" && recodesConfirm && (
-              <div className="flex items-center gap-2 bg-rose-50 border border-rose-300 rounded-sm px-3 py-1.5 text-xs">
-                <span className="text-rose-700 font-semibold">سيتم مسح جميع الأكواد والبدء من جديد. تأكيد؟</span>
-                <button
-                  onClick={() => runBackfill(true)}
-                  disabled={backfilling}
-                  className="bg-rose-700 hover:bg-rose-800 text-white font-bold px-2 py-0.5 rounded-sm disabled:opacity-60"
-                >
-                  {backfilling ? "…" : "نعم، إعادة"}
-                </button>
-                <button
-                  onClick={() => setRecodesConfirm(false)}
-                  className="text-slate-500 hover:text-slate-700 px-1"
-                >
-                  إلغاء
-                </button>
-              </div>
             )}
           </div>
         </div>
