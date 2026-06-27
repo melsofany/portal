@@ -136,19 +136,23 @@ async function copyTokenLink(token: string, setCopied: (id: string) => void) {
 }
 
 async function downloadRfqPdf(rfq: Rfq, sup: RfqSupplier) {
-    // Open the window SYNCHRONOUSLY before any await — required for iOS Safari popup policy
-    const win = window.open("", "_blank", "width=900,height=700");
+    // Open window FIRST (synchronously) — iOS Safari blocks window.open() after await
+    const win = window.open("", "_blank", "width=960,height=700");
     if (!win) { alert("يرجى السماح بالنوافذ المنبثقة في المتصفح"); return; }
-    win.document.write('<html dir="rtl"><body style="font-family:Arial;padding:40px;text-align:center;color:#1e3a8a"><p>جاري التحميل…</p></body></html>');
+    win.document.write('<html dir="rtl"><body style="font-family:Arial;padding:40px;text-align:center;color:#1e3a8a"><p>جاري تحميل الـ PDF…</p></body></html>');
 
-    // Get buyer company name from public settings (no auth needed)
-    let companyName = "";
+    // Fetch company settings (public, no auth needed)
+    let companyName = "", companyPhone = "", companyAddress = "", logoUrl = "";
     try {
       const s = await fetch(`${API_BASE}/api/settings/public`);
-      if (s.ok) { const j = await s.json() as any; companyName = j.name ?? ""; }
+      if (s.ok) {
+        const j = await s.json() as any;
+        companyName = j.name ?? ""; companyPhone = j.phone ?? "";
+        companyAddress = j.address ?? ""; logoUrl = j.logoUrl ?? "";
+      }
     } catch { /* ignore */ }
 
-    // Decode JWT payload to get sender name (read-only, no sig check)
+    // Decode JWT payload to get sender name (no sig check)
     let senderName = "";
     try {
       const tok = getAuthToken();
@@ -158,10 +162,20 @@ async function downloadRfqPdf(rfq: Rfq, sup: RfqSupplier) {
       }
     } catch { /* ignore */ }
 
-    // Build table rows
-    const tableRows = rfq.items.map((item, idx) => `
-      <tr style="border-bottom:1px solid #e2e8f0;background:${idx % 2 === 0 ? "#fff" : "#f8fafc"}">
-        <td style="padding:7px 10px;text-align:center;color:#64748b;font-size:11px">${idx + 1}</td>
+    // Fetch sender phone from /employees/me
+    let senderPhone = "";
+    try {
+      const r = await authFetch(`${API_BASE}/api/employees/me`);
+      if (r.ok) { const e = await r.json() as any; senderPhone = e.phone ?? ""; }
+    } catch { /* ignore */ }
+
+    const logoHtml = logoUrl
+      ? `<img src="${logoUrl}" alt="logo" style="max-height:60px;max-width:140px;object-fit:contain"/>`
+      : `<div style="width:54px;height:54px;background:#1e4080;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:700">${companyName.slice(0,1)}</div>`;
+
+    const tableRows = rfq.items.map((item, i) => `
+      <tr style="border-bottom:1px solid #e2e8f0;background:${i % 2 === 0 ? "#fff" : "#f8fafc"}">
+        <td style="padding:7px 10px;text-align:center;color:#64748b;font-size:11px">${i + 1}</td>
         <td style="padding:7px 10px;text-align:right;font-size:12px">${item.description ?? ""}</td>
         <td style="padding:7px 10px;text-align:center;font-size:11px;color:#475569">${item.partNo ?? ""}</td>
         <td style="padding:7px 10px;text-align:center;font-size:11px">${item.unit ?? ""}</td>
@@ -171,43 +185,44 @@ async function downloadRfqPdf(rfq: Rfq, sup: RfqSupplier) {
     const html = `<!DOCTYPE html>
   <html dir="rtl" lang="ar">
   <head>
-    <meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
     <title>طلب تسعير ${rfq.rfqNo}</title>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet"/>
     <style>
       *{box-sizing:border-box;margin:0;padding:0}
       body{font-family:'Cairo',Arial,sans-serif;direction:rtl;background:#fff;color:#1e293b}
-      @media print{@page{size:A4;margin:0}body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.no-print{display:none!important}}
+      @media print{@page{size:A4;margin:10mm}body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.no-print{display:none!important}}
       .page{max-width:794px;margin:0 auto}
-      .hdr{background:#0f2240;color:#fff;padding:18px 32px}
-      .hdr-t{font-size:18px;font-weight:700;text-align:right}
-      .hdr-c{font-size:11px;color:#94a3b8;margin-top:4px;text-align:right}
-      .body{padding:20px 32px}
-      .rfqbox{background:#f0f7ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 14px;margin-bottom:16px}
-      .rfqlbl{font-size:9px;color:#3b82f6;text-align:right}
-      .rfqval{font-size:16px;font-weight:700;color:#1e3a8a;text-align:right}
-      .igrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+      .hdr{background:#0f2240;color:#fff;padding:16px 28px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+      .hdr-info{text-align:right;flex:1}
+      .hdr-title{font-size:17px;font-weight:700}
+      .hdr-co{font-size:12px;color:#cbd5e1;margin-top:3px}
+      .hdr-det{font-size:10px;color:#94a3b8;margin-top:3px}
+      .body{padding:18px 28px}
+      .rfqbox{background:#f0f7ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 14px;margin-bottom:14px}
+      .rfqlbl{font-size:9px;color:#3b82f6}.rfqval{font-size:16px;font-weight:700;color:#1e3a8a}
+      .igrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
       .ibox{background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:7px 12px}
-      .ilbl{font-size:9px;color:#64748b;text-align:right}
-      .ival{font-size:12px;font-weight:600;color:#1e293b;text-align:right}
+      .ilbl{font-size:9px;color:#64748b}.ival{font-size:12px;font-weight:600;color:#1e293b}
       table{width:100%;border-collapse:collapse;border:1px solid #e2e8f0}
       thead tr{background:#1e3a5f}
       thead th{padding:9px 10px;text-align:center;color:#fff;font-size:10px;font-weight:600}
-      .nbox{margin-top:16px;background:#fffbeb;border:1px solid #fde68a;border-radius:5px;padding:10px 14px}
-      .nlbl{font-size:9px;color:#92400e;margin-bottom:4px}
-      .ntxt{font-size:11px;color:#78350f}
-      .sbox{margin-top:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:8px 14px}
-      .slbl{font-size:9px;color:#64748b;margin-bottom:2px}
-      .sval{font-size:11px;font-weight:600}
-      .pbtn{position:fixed;bottom:20px;left:20px;background:#1e3a8a;color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:14px;font-family:'Cairo',Arial,sans-serif;cursor:pointer}
+      .nbox{margin-top:14px;background:#fffbeb;border:1px solid #fde68a;border-radius:5px;padding:10px 14px}
+      .nlbl{font-size:9px;color:#92400e;margin-bottom:3px}.ntxt{font-size:11px;color:#78350f}
+      .srow{margin-top:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:10px 16px;display:flex;gap:28px;flex-wrap:wrap}
+      .slbl{font-size:9px;color:#64748b;margin-bottom:2px}.sval{font-size:12px;font-weight:600}
+      .pbtn{position:fixed;bottom:20px;left:20px;background:#1e3a8a;color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:14px;font-family:'Cairo',Arial,sans-serif;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.3)}
     </style>
   </head>
   <body>
   <div class="page">
     <div class="hdr">
-      <div class="hdr-t">طلب تسعير / Request for Quotation</div>
-      <div class="hdr-c">${companyName}</div>
+      <div>${logoHtml}</div>
+      <div class="hdr-info">
+        <div class="hdr-title">طلب تسعير / Request for Quotation</div>
+        <div class="hdr-co">${companyName}</div>
+        ${companyPhone || companyAddress ? `<div class="hdr-det">${companyPhone ? "📞 " + companyPhone : ""}${companyPhone && companyAddress ? "  ·  " : ""}${companyAddress}</div>` : ""}
+      </div>
     </div>
     <div class="body">
       <div class="rfqbox">
@@ -215,25 +230,26 @@ async function downloadRfqPdf(rfq: Rfq, sup: RfqSupplier) {
         <div class="rfqval">${rfq.rfqNo}</div>
       </div>
       <div class="igrid">
-        <div class="ibox"><div class="ilbl">التاريخ / Date</div><div class="ival">${rfq.requestDate}</div></div>
+        <div class="ibox"><div class="ilbl">آخر موعد للتسعير</div><div class="ival">${rfq.requestDate}</div></div>
         <div class="ibox"><div class="ilbl">المورد / Supplier</div><div class="ival">${sup.companyName}</div></div>
+        <div class="ibox"><div class="ilbl">تاريخ الإصدار</div><div class="ival">${new Date().toLocaleDateString("ar-EG")}</div></div>
       </div>
       <table>
         <thead><tr>
-          <th style="width:36px">#</th>
-          <th>البيان / Description</th>
-          <th>Part No.</th>
-          <th>الوحدة</th>
-          <th>الكمية</th>
+          <th style="width:36px">#</th><th>البيان / Description</th>
+          <th>Part No.</th><th>الوحدة</th><th>الكمية / Qty</th>
         </tr></thead>
         <tbody>${tableRows}</tbody>
       </table>
-      ${rfq.notes ? `<div class="nbox"><div class="nlbl">ملاحظات</div><div class="ntxt">${rfq.notes}</div></div>` : ""}
-      ${senderName ? `<div class="sbox"><div class="slbl">من / From</div><div class="sval">${senderName}</div></div>` : ""}
+      ${rfq.notes ? `<div class="nbox"><div class="nlbl">ملاحظات / Notes</div><div class="ntxt">${rfq.notes}</div></div>` : ""}
+      ${senderName || senderPhone ? `<div class="srow">
+        ${senderName ? `<div><div class="slbl">مسؤول الطلب</div><div class="sval">${senderName}</div></div>` : ""}
+        ${senderPhone ? `<div><div class="slbl">📞 تليفون</div><div class="sval">${senderPhone}</div></div>` : ""}
+      </div>` : ""}
     </div>
   </div>
   <button class="pbtn no-print" onclick="window.print()">🖨️ طباعة / حفظ PDF</button>
-  <script>window.addEventListener('load',()=>setTimeout(()=>window.print(),600));<\/script>
+  <script>window.addEventListener('load',()=>setTimeout(()=>window.print(),700));<\/script>
   </body></html>`;
 
     win.document.open();
