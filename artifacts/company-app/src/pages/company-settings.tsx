@@ -489,12 +489,7 @@ export default function CompanySettingsPage() {
                   </div>
                 </div>
               </SapSection>
-            </div>
-          )}
 
-          {/* ── التكويد الذكي ── */}
-          {activeTab === "coding" && (
-            <div className="space-y-4 max-w-2xl">
               <SapSection title="محرك الذكاء الاصطناعي (Gemini)" icon={<BrainCircuit className="h-4 w-4 text-violet-600" />}>
                 <div className="space-y-4">
                   <p className="text-xs text-slate-500 leading-relaxed">
@@ -522,7 +517,12 @@ export default function CompanySettingsPage() {
                   )}
                 </div>
               </SapSection>
+            </div>
+          )}
 
+          {/* ── التكويد الذكي ── */}
+          {activeTab === "coding" && (
+            <div className="space-y-4 max-w-2xl">
               <SapSection title="تكويد البنود" icon={<Wand2 className="h-4 w-4 text-[#0064d9]" />}>
                 <div className="space-y-4">
                   <p className="text-xs text-slate-500 leading-relaxed">
