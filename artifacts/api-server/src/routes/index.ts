@@ -34,13 +34,21 @@ import { Router, type IRouter } from "express";
     router.get("/whatsapp/webhook", webhookVerify);
     router.post("/whatsapp/webhook", webhookIncoming);
 
-    // Public endpoint — returns company name + logo without auth (used by sign-in page)
+    // Public endpoint — returns company info without auth (used by sign-in page and PDF generation)
       router.get("/settings/public", async (_req, res) => {
         try {
-          const rows = await db.select({ name: companySettingsTable.name, logoUrl: companySettingsTable.logoUrl }).from(companySettingsTable).limit(1);
-          res.json(rows[0] ?? { name: "", logoUrl: "" });
+          const rows = await db.select({
+            name: companySettingsTable.name,
+            logoUrl: companySettingsTable.logoUrl,
+            phone: companySettingsTable.phone,
+            address: companySettingsTable.address,
+            email: companySettingsTable.email,
+            commercialReg: companySettingsTable.commercialReg,
+            taxReg: companySettingsTable.taxReg,
+          }).from(companySettingsTable).limit(1);
+          res.json(rows[0] ?? { name: "", logoUrl: "", phone: "", address: "", email: "", commercialReg: "", taxReg: "" });
         } catch {
-          res.json({ name: "", logoUrl: "" });
+          res.json({ name: "", logoUrl: "", phone: "", address: "", email: "", commercialReg: "", taxReg: "" });
         }
       });
 
