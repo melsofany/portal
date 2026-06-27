@@ -66,6 +66,13 @@ import { useState, useCallback, useMemo } from "react";
     );
   }
 
+  function fmtQty(val: string | number | null | undefined): string {
+    if (val === null || val === undefined || val === "") return "";
+    const n = parseFloat(String(val));
+    if (isNaN(n)) return String(val ?? "");
+    return n % 1 === 0 ? String(Math.round(n)) : String(parseFloat(n.toFixed(10)));
+  }
+
   function statusBadge(s: string) {
     if (s === "مفتوح") return "bg-blue-100 text-blue-700";
     if (s === "مكتمل") return "bg-green-100 text-green-700";
@@ -515,7 +522,7 @@ import { useState, useCallback, useMemo } from "react";
                               <td className="px-3 py-2 text-xs text-slate-700">{it.description}</td>
                               <td className="px-3 py-2 text-xs text-slate-500" dir="ltr">{it.partNo || "—"}</td>
                               <td className="px-3 py-2 text-xs text-slate-500">{it.unit || "—"}</td>
-                              <td className="px-3 py-2 text-xs text-slate-500" dir="ltr">{it.quantity}</td>
+                              <td className="px-3 py-2 text-xs text-slate-500" dir="ltr">{fmtQty(it.quantity)}</td>
                               <td className="px-3 py-2 text-xs">
                                 {it.bestPrice !== null ? (
                                   <span className="text-emerald-600 font-medium">{it.bestPrice.toFixed(3)}</span>
