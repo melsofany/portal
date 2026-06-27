@@ -18,6 +18,13 @@ import { eq, desc, inArray, or, ilike, and } from "drizzle-orm";
 
 const router = Router();
 
+function fmtQty(val: string | number | null | undefined): string {
+  if (val === null || val === undefined || val === "") return "";
+  const n = parseFloat(String(val));
+  if (isNaN(n)) return String(val ?? "");
+  return n % 1 === 0 ? String(Math.round(n)) : String(parseFloat(n.toFixed(10)));
+}
+
 function generateRfqNo(): string {
   const now = new Date();
   const y = now.getFullYear();
@@ -278,7 +285,7 @@ async function generateRfqPdf(opts: {
       doc.text(item.description, cx, y + 6, { width: colWidths.desc, align: "right" }); cx += colWidths.desc;
       doc.text(item.partNo || "—", cx, y + 6, { width: colWidths.partNo, align: "center" }); cx += colWidths.partNo;
       doc.text(item.unit || "—", cx, y + 6, { width: colWidths.unit, align: "center" }); cx += colWidths.unit;
-      doc.text(String(item.quantity), cx, y + 6, { width: colWidths.qty, align: "center" });
+      doc.text(fmtQty(item.quantity), cx, y + 6, { width: colWidths.qty, align: "center" });
       y += rowH;
     }
 
