@@ -916,7 +916,72 @@ router.post("/:id/suppliers", async (req, res) => {
   }
 });
 
-// ─── DELETE /api/supplier-quotations/:id ────────────────────────────────────
+
+  // ─── GET /api/supplier-quotations/:rfqId/pdf/:supplierId ─────────────────────
+  router.get("/:rfqId/pdf/:supplierId", async (req, res) => {
+    try {
+      const rfqId    = Number(req.params.rfqId);
+      const supplierIdParam = Number(req.params.supplierId);
+
+      const [rfq] = await db.select().from(supplierQuotationsTable)
+        .where(eq(supplierQuotationsTable.id, rfqId));
+      if (!rfq) return res.status(404).json({ error: "الطلب غير موجود" });
+
+      const items = await db.select().from(supplierQuotationItemsTable)
+        .where(eq(supplierQuotationItemsTable.rfqId, rfqId))
+        .orderBy(supplierQuotationItemsTable.sortOrder);
+
+      const [rfqSup] = await db
+        .select({ companyName: suppliersTable.companyName })
+        .from(supplierQuotationSuppliersTable)
+        .leftJoin(suppliersTable, eq(supplierQuotationSuppliersTable.supplierId, suppliersTable.id))
+        .where(and(
+          eq(supplierQuotationSuppliersTable.rfqId, rfqId),
+          eq(supplierQuotationSuppliersTable.supplierId, supplierIdParam),
+        ));
+
+      const [settings] = await db
+        .select({ name: companySettingsTable.name })
+        .from(companySettingsTable).limit(1);
+
+      const userId = req.auth?.userId;
+      let senderName = req.auth?.fullName ?? "";
+      let senderPhone = "";
+      if (userId) {
+        const [emp] = await db
+          .select({ phone: employeesTable.phone, fullName: employeesTable.fullName })
+          .from(employeesTable)
+          .where(eq(employeesTable.userId, userId))
+          .limit(1);
+        if (emp) { senderName = emp.fullName ?? senderName; senderPhone = emp.phone ?? ""; }
+      }
+
+      const pdfBuffer = await generateRfqPdf({
+        rfqNo:        rfq.rfqNo,
+        requestDate:  rfq.requestDate,
+        companyName:  settings?.name ?? "",
+        supplierName: rfqSup?.companyName ?? "",
+        items:        items.map(i => ({
+          description: i.description,
+          partNo:      i.partNo   ?? undefined,
+          unit:        i.unit     ?? undefined,
+          quantity:    i.quantity,
+        })),
+        senderName,
+        senderPhone,
+        notes: rfq.notes ?? "",
+      });
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="RFQ-${rfq.rfqNo}.pdf"`);
+      res.send(pdfBuffer);
+    } catch (err) {
+      req.log.error(err);
+      res.status(500).json({ error: "فشل في توليد الـ PDF" });
+    }
+  });
+
+  // ─── DELETE /api/supplier-quotations/:id ────────────────────────────────────
 router.delete("/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
