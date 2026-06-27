@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import {
   customerQuotationsTable,
   customerQuotationItemsTable,
@@ -21,6 +21,54 @@ function generateQuotationNo(): string {
   const d = String(now.getDate()).padStart(2, "0");
   const rand = Math.floor(1000 + Math.random() * 9000);
   return `CQ-${y}${m}${d}-${rand}`;
+}
+
+/**
+ * Auto-match a single item description against canonical_items.
+ * Returns { code, score } or { code: "", score: 0 } if no confident match found.
+ */
+async function autoCodeItem(description: string): Promise<{ code: string; score: number }> {
+  if (!description.trim()) return { code: "", score: 0 };
+  const desc = description.trim().toLowerCase();
+  try {
+    // Ensure canonical_items table exists before querying
+    const { rows } = await pool.query<{ internal_code: string; score: number }>(`
+      SELECT internal_code,
+        (
+          CASE
+            WHEN LOWER(description_en) = $2 THEN 20
+            WHEN LOWER(description_ar) = $2 THEN 20
+            WHEN LOWER(description_en) ILIKE $1 THEN 12
+            WHEN LOWER(description_ar) ILIKE $1 THEN 12
+            WHEN $2 ILIKE '%' || LOWER(description_en) || '%' AND LENGTH(description_en) > 4 THEN 8
+            WHEN $2 ILIKE '%' || LOWER(description_ar) || '%' AND LENGTH(description_ar) > 4 THEN 8
+            ELSE 0
+          END
+          + COALESCE((
+              SELECT COUNT(*)::int
+              FROM unnest(keywords) k
+              WHERE LENGTH(k) > 2 AND $2 ILIKE '%' || LOWER(k) || '%'
+            ), 0)
+        ) AS score
+      FROM canonical_items
+      WHERE
+        LOWER(description_en) ILIKE $1
+        OR LOWER(description_ar) ILIKE $1
+        OR $2 ILIKE '%' || LOWER(description_en) || '%'
+        OR $2 ILIKE '%' || LOWER(description_ar) || '%'
+        OR EXISTS (
+          SELECT 1 FROM unnest(keywords) k
+          WHERE LENGTH(k) > 2 AND $2 ILIKE '%' || LOWER(k) || '%'
+        )
+      ORDER BY score DESC
+      LIMIT 1
+    `, [`%${desc}%`, desc]);
+
+    if (!rows[0] || rows[0].score < 3) return { code: "", score: 0 };
+    return { code: rows[0].internal_code, score: rows[0].score };
+  } catch {
+    return { code: "", score: 0 };
+  }
 }
 
 // GET /api/customer-quotations
@@ -50,50 +98,49 @@ router.get("/", async (req, res) => {
   }
 });
 
+// GET /api/customer-quotations/search?q=...
+router.get("/search", async (req, res) => {
+  const q = String(req.query.q ?? "").trim().toLowerCase();
+  if (!q) return res.json([]);
+  try {
+    const quotations = await db
+      .select({
+        id: customerQuotationsTable.id,
+        quotationNo: customerQuotationsTable.quotationNo,
+        customerId: customerQuotationsTable.customerId,
+        customerName: customersTable.name,
+        customerOrderNo: customerQuotationsTable.customerOrderNo,
+        status: customerQuotationsTable.status,
+      })
+      .from(customerQuotationsTable)
+      .leftJoin(customersTable, eq(customerQuotationsTable.customerId, customersTable.id))
+      .orderBy(desc(customerQuotationsTable.createdAt));
 
-  // GET /api/customer-quotations/search?q=...
-  router.get("/search", async (req, res) => {
-    const q = String(req.query.q ?? "").trim().toLowerCase();
-    if (!q) return res.json([]);
-    try {
-      const quotations = await db
-        .select({
-          id: customerQuotationsTable.id,
-          quotationNo: customerQuotationsTable.quotationNo,
-          customerId: customerQuotationsTable.customerId,
-          customerName: customersTable.name,
-          customerOrderNo: customerQuotationsTable.customerOrderNo,
-          status: customerQuotationsTable.status,
-        })
-        .from(customerQuotationsTable)
-        .leftJoin(customersTable, eq(customerQuotationsTable.customerId, customersTable.id))
-        .orderBy(desc(customerQuotationsTable.createdAt));
+    const filtered = quotations.filter(
+      (qt) =>
+        qt.quotationNo?.toLowerCase().includes(q) ||
+        qt.customerOrderNo?.toLowerCase().includes(q)
+    );
 
-      const filtered = quotations.filter(
-        (qt) =>
-          qt.quotationNo?.toLowerCase().includes(q) ||
-          qt.customerOrderNo?.toLowerCase().includes(q)
-      );
+    const results = await Promise.all(
+      filtered.slice(0, 10).map(async (qt) => {
+        const items = await db
+          .select()
+          .from(customerQuotationItemsTable)
+          .where(eq(customerQuotationItemsTable.quotationId, qt.id))
+          .orderBy(customerQuotationItemsTable.sortOrder);
+        return { ...qt, items };
+      })
+    );
 
-      const results = await Promise.all(
-        filtered.slice(0, 10).map(async (qt) => {
-          const items = await db
-            .select()
-            .from(customerQuotationItemsTable)
-            .where(eq(customerQuotationItemsTable.quotationId, qt.id))
-            .orderBy(customerQuotationItemsTable.sortOrder);
-          return { ...qt, items };
-        })
-      );
+    res.json(results);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "فشل في البحث" });
+  }
+});
 
-      res.json(results);
-    } catch (err) {
-      req.log.error(err);
-      res.status(500).json({ error: "فشل في البحث" });
-    }
-  });
-
-  // GET /api/customer-quotations/:id
+// GET /api/customer-quotations/:id
 router.get("/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -130,7 +177,6 @@ router.get("/:id", async (req, res) => {
 });
 
 // GET /api/customer-quotations/:id/best-supplier-prices
-// Returns best submitted supplier price per customer quotation item
 router.get("/:id/best-supplier-prices", async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -174,7 +220,6 @@ router.get("/:id/best-supplier-prices", async (req, res) => {
       .from(supplierQuotationItemsTable)
       .where(inArray(supplierQuotationItemsTable.rfqId, rfqIds));
 
-    // Match customer items to supplier items by description (normalized)
     const result: Record<number, { bestPrice: number; count: number }> = {};
 
     for (const cqItem of cqItems) {
@@ -212,6 +257,13 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "يجب إضافة بند واحد على الأقل" });
     }
 
+    // ── Ensure new columns exist (migration guard) ──
+    await pool.query(`
+      ALTER TABLE customer_quotation_items
+        ADD COLUMN IF NOT EXISTS internal_code TEXT NOT NULL DEFAULT '',
+        ADD COLUMN IF NOT EXISTS internal_code_score NUMERIC(5,4) NOT NULL DEFAULT 0
+    `).catch(() => {});
+
     const quotationNo = generateQuotationNo();
 
     const [quotation] = await db
@@ -227,6 +279,11 @@ router.post("/", async (req, res) => {
       })
       .returning();
 
+    // Auto-code each item description in parallel
+    const codingResults = await Promise.all(
+      (items as any[]).map((item) => autoCodeItem(item.description?.trim() ?? ""))
+    );
+
     const itemRows = (items as any[]).map((item, idx) => ({
       quotationId: quotation.id,
       customerItemCode: item.customerItemCode?.trim() ?? "",
@@ -235,6 +292,8 @@ router.post("/", async (req, res) => {
       unit: item.unit?.trim() ?? "",
       quantity: String(item.quantity ?? 0),
       sortOrder: idx,
+      internalCode: codingResults[idx].code,
+      internalCodeScore: String(codingResults[idx].score),
     }));
 
     await db.insert(customerQuotationItemsTable).values(itemRows);
@@ -264,6 +323,13 @@ router.put("/:id", async (req, res) => {
       return res.status(400).json({ error: "يجب إضافة بند واحد على الأقل" });
     }
 
+    // ── Ensure new columns exist (migration guard) ──
+    await pool.query(`
+      ALTER TABLE customer_quotation_items
+        ADD COLUMN IF NOT EXISTS internal_code TEXT NOT NULL DEFAULT '',
+        ADD COLUMN IF NOT EXISTS internal_code_score NUMERIC(5,4) NOT NULL DEFAULT 0
+    `).catch(() => {});
+
     const [existing] = await db
       .select()
       .from(customerQuotationsTable)
@@ -282,8 +348,12 @@ router.put("/:id", async (req, res) => {
       })
       .where(eq(customerQuotationsTable.id, id));
 
-    // Replace items
     await db.delete(customerQuotationItemsTable).where(eq(customerQuotationItemsTable.quotationId, id));
+
+    // Auto-code each item description in parallel
+    const codingResults = await Promise.all(
+      (items as any[]).map((item) => autoCodeItem(item.description?.trim() ?? ""))
+    );
 
     const itemRows = (items as any[]).map((item, idx) => ({
       quotationId: id,
@@ -295,6 +365,9 @@ router.put("/:id", async (req, res) => {
       sortOrder: idx,
       unitPrice: item.unitPrice ? String(parseFloat(item.unitPrice) || 0) : "0",
       customerNotes: item.customerNotes?.trim() ?? "",
+      // Keep manually set code if provided; otherwise use auto-match
+      internalCode: (item.internalCode?.trim()) || codingResults[idx].code,
+      internalCodeScore: String(codingResults[idx].score),
     }));
 
     await db.insert(customerQuotationItemsTable).values(itemRows);
@@ -321,7 +394,7 @@ router.put("/:id", async (req, res) => {
 router.patch("/:id/pricing", async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const { prices } = req.body; // [{ itemId, unitPrice, customerNotes }]
+    const { prices } = req.body;
 
     if (!Array.isArray(prices)) return res.status(400).json({ error: "prices مطلوب" });
 
@@ -340,7 +413,6 @@ router.patch("/:id/pricing", async (req, res) => {
         );
     }
 
-    // Check if all items have price — if so, set status to "مكتمل"
     const allItems = await db
       .select()
       .from(customerQuotationItemsTable)
@@ -353,7 +425,6 @@ router.patch("/:id/pricing", async (req, res) => {
         .set({ status: "مكتمل" })
         .where(eq(customerQuotationsTable.id, id));
 
-      // Also mark all linked supplier quotations as "مكتمل"
       await db
         .update(supplierQuotationsTable)
         .set({ status: "مكتمل" })
