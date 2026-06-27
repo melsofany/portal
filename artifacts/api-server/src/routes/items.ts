@@ -127,18 +127,28 @@ import { Router } from "express";
       }
     });
 
-    // POST /api/items/backfill-codes — auto-code all items missing an internal_code
+    // POST /api/items/backfill-codes — auto-code items
+    // Body: { force?: boolean }
+    //   force=false (default): only code items where internal_code is empty
+    //   force=true: wipe ALL existing codes + canonical_items, then re-code from scratch
     router.post("/backfill-codes", async (req, res) => {
+      const force = req.body?.force === true;
       try {
+        // Ensure columns exist
         await pool.query(`
           ALTER TABLE customer_quotation_items
             ADD COLUMN IF NOT EXISTS internal_code TEXT NOT NULL DEFAULT '',
             ADD COLUMN IF NOT EXISTS internal_code_score NUMERIC(6,2) NOT NULL DEFAULT 0
         `).catch(() => {});
-
         await pool.query(
           `ALTER TABLE canonical_items ADD COLUMN IF NOT EXISTS part_no TEXT NOT NULL DEFAULT ''`
         ).catch(() => {});
+
+        if (force) {
+          // Reset all existing codes and wipe auto-generated canonical items
+          await pool.query(`UPDATE customer_quotation_items SET internal_code = '', internal_code_score = 0`);
+          await pool.query(`DELETE FROM canonical_items`);
+        }
 
         const { rows: uncoded } = await pool.query<{ id: number; description: string; part_no: string }>(`
           SELECT id, description, COALESCE(part_no,'') AS part_no
@@ -161,7 +171,7 @@ import { Router } from "express";
           }
         }
 
-        res.json({ total: uncoded.length, coded, failed });
+        res.json({ total: uncoded.length, coded, failed, reset: force });
       } catch (err: any) {
         res.status(500).json({ error: "فشل في تكويد البنود", details: err.message });
       }
