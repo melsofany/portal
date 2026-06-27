@@ -661,6 +661,7 @@ export default function ItemsPage() {
   const [tab,          setTab]          = useState<"items" | "coding">("items");
   const [backfilling,  setBackfilling]  = useState(false);
   const [backfillMsg,  setBackfillMsg]  = useState<string | null>(null);
+  const [recodesConfirm, setRecodesConfirm] = useState(false);
 
   const fetchItems = () => {
     fetch(`${API_BASE}/api/items`, { credentials: "include" })
@@ -671,19 +672,22 @@ export default function ItemsPage() {
 
   useEffect(() => { fetchItems(); }, []);
 
-  const runBackfill = async () => {
+  const runBackfill = async (force = false) => {
     setBackfilling(true);
     setBackfillMsg(null);
+    setRecodesConfirm(false);
     try {
       const token = localStorage.getItem("auth_token");
       const r = await fetch(`${API_BASE}/api/items/backfill-codes`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ force }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "خطأ");
-      setBackfillMsg(`✓ تم تكويد ${data.coded} بند من أصل ${data.total} (فشل: ${data.failed})`);
+      const resetNote = force ? " (تمت إعادة الضبط الكامل)" : "";
+      setBackfillMsg(`✓ تم تكويد ${data.coded} بند من أصل ${data.total} (فشل: ${data.failed})${resetNote}`);
       setLoading(true);
       fetchItems();
     } catch (err: any) {
@@ -725,15 +729,43 @@ export default function ItemsPage() {
                 {filtered.length} بند
               </span>
             )}
-            {tab === "items" && (
-              <button
-                onClick={runBackfill}
-                disabled={backfilling}
-                className="flex items-center gap-1.5 rounded-sm bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white text-xs font-semibold px-3 py-1.5 transition-colors"
-              >
-                <Wand2 className="h-3.5 w-3.5" />
-                {backfilling ? "جاري التكويد…" : "كود البنود الحالية"}
-              </button>
+            {tab === "items" && !recodesConfirm && (
+              <>
+                <button
+                  onClick={() => runBackfill(false)}
+                  disabled={backfilling}
+                  className="flex items-center gap-1.5 rounded-sm bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white text-xs font-semibold px-3 py-1.5 transition-colors"
+                >
+                  <Wand2 className="h-3.5 w-3.5" />
+                  {backfilling ? "جاري التكويد…" : "كود البنود الجديدة"}
+                </button>
+                <button
+                  onClick={() => setRecodesConfirm(true)}
+                  disabled={backfilling}
+                  className="flex items-center gap-1.5 rounded-sm bg-rose-700 hover:bg-rose-800 disabled:opacity-60 text-white text-xs font-semibold px-3 py-1.5 transition-colors"
+                >
+                  <Wand2 className="h-3.5 w-3.5" />
+                  إعادة تكويد الكل
+                </button>
+              </>
+            )}
+            {tab === "items" && recodesConfirm && (
+              <div className="flex items-center gap-2 bg-rose-50 border border-rose-300 rounded-sm px-3 py-1.5 text-xs">
+                <span className="text-rose-700 font-semibold">سيتم مسح جميع الأكواد والبدء من جديد. تأكيد؟</span>
+                <button
+                  onClick={() => runBackfill(true)}
+                  disabled={backfilling}
+                  className="bg-rose-700 hover:bg-rose-800 text-white font-bold px-2 py-0.5 rounded-sm disabled:opacity-60"
+                >
+                  {backfilling ? "…" : "نعم، إعادة"}
+                </button>
+                <button
+                  onClick={() => setRecodesConfirm(false)}
+                  className="text-slate-500 hover:text-slate-700 px-1"
+                >
+                  إلغاء
+                </button>
+              </div>
             )}
           </div>
         </div>
