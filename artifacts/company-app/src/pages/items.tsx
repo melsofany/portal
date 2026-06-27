@@ -39,6 +39,7 @@ interface Item {
   quotation_status: string;
   quotation_id: number;
   customer_name: string;
+  internal_code?: string;
 }
 
 interface DetailRow {
@@ -763,13 +764,20 @@ export default function ItemsPage() {
                       {filtered.map((item, idx) => (
                         <tr key={item.id} className={`border-b border-slate-100 hover:bg-blue-50/30 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
                           <td className="px-3 py-2 text-slate-400 text-center border-l border-slate-100 font-mono">{idx + 1}</td>
-                          <td className="px-3 py-2 border-l border-slate-100 max-w-[260px]">
-                            <button
-                              onClick={() => setSelectedDesc(item.description)}
-                              className="text-right text-[#1e3a5f] font-semibold hover:underline underline-offset-2 truncate block max-w-full"
-                              title="اضغط لعرض السجل الكامل">
-                              {item.description || "—"}
-                            </button>
+                          <td className="px-3 py-2 border-l border-slate-100">
+                            <div className="flex items-start gap-2 flex-wrap">
+                              {item.internal_code && (
+                                <span className="shrink-0 font-mono font-bold tracking-widest text-[#1e3a5f] bg-[#1e3a5f]/8 rounded-sm px-2 py-0.5 text-[11px] border border-[#1e3a5f]/20 whitespace-nowrap">
+                                  {item.internal_code}
+                                </span>
+                              )}
+                              <button
+                                onClick={() => setSelectedDesc(item.description)}
+                                className="text-right text-[#1e3a5f] font-semibold hover:underline underline-offset-2 break-words text-start"
+                                title="اضغط لعرض السجل الكامل">
+                                {item.description || "—"}
+                              </button>
+                            </div>
                           </td>
                           <td className="px-3 py-2 border-l border-slate-100 text-slate-500 font-mono">{item.customer_item_code || "—"}</td>
                           <td className="px-3 py-2 border-l border-slate-100 text-slate-500 font-mono">{item.part_no || "—"}</td>
