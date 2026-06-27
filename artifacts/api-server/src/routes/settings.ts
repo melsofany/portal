@@ -103,6 +103,7 @@ import { Router } from "express";
           bankApiUrl: body.bankApiUrl ?? settings.bankApiUrl,
           bankApiKey: body.bankApiKey ?? settings.bankApiKey,
           bankApiSecret: body.bankApiSecret ?? settings.bankApiSecret,
+          geminiApiKey: body.geminiApiKey ?? settings.geminiApiKey,
         })
         .returning();
       res.json(updated[0]);
