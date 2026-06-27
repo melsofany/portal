@@ -1,10 +1,10 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
     import AppLayout from "@/components/AppLayout";
     import { Button } from "@/components/ui/button";
     import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
     import { Input } from "@/components/ui/input";
     import { Label } from "@/components/ui/label";
-    import { Trash2, Plus, Pencil, DollarSign, X, Loader2, TrendingUp, Search, Sparkles } from "lucide-react";
+    import { Trash2, Plus, Pencil, DollarSign, X, Loader2, TrendingUp, Search, Sparkles, CheckCircle2 } from "lucide-react";
     import {
       useGetCustomerQuotations,
       useCreateCustomerQuotation,
@@ -25,6 +25,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
       quantity: string;
       unitPrice?: string;
       customerNotes?: string;
+      internalCode?: string;
     };
 
     const emptyItem = (): LineItem => ({
@@ -35,6 +36,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
       quantity: "",
       unitPrice: "0",
       customerNotes: "",
+      internalCode: "",
     });
 
     const emptyHeader = {
@@ -54,7 +56,8 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
       onChange: (i: number, f: keyof LineItem, v: string) => void;
       onRemove: (i: number) => void; canRemove: boolean;
     }) {
-      const [suggestion, setSuggestion] = useState<{ code: string; confidence: number; descAr: string; descEn: string } | null>(null);
+      // Live suggestion while typing (optional preview before save)
+      const [suggestion, setSuggestion] = useState<{ code: string; score: number } | null>(null);
       const [matching, setMatching] = useState(false);
       const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -72,19 +75,14 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
               body: JSON.stringify({ description: desc }),
             });
             const data = await r.json();
-            if (data.matched && data.code) {
-              setSuggestion({
-                code: data.code,
-                confidence: data.confidence,
-                descAr: data.item?.description_ar ?? "",
-                descEn: data.item?.description_en ?? "",
-              });
+            if (data.matched && (data.item?.internal_code || data.code)) {
+              setSuggestion({ code: data.item?.internal_code ?? data.code, score: data.score ?? data.confidence ?? 0 });
             } else {
               setSuggestion(null);
             }
           } catch { setSuggestion(null); }
           finally { setMatching(false); }
-        }, 800);
+        }, 900);
         return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
       }, [item.description]);
 
@@ -93,35 +91,33 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
           <td className="px-2 py-1.5">
             <Input value={item.customerItemCode} onChange={e => onChange(index, "customerItemCode", e.target.value)} placeholder="كود البند" className="h-8 text-xs" />
           </td>
-          <td className="px-2 py-1.5 min-w-[220px]">
+          <td className="px-2 py-1.5 min-w-[240px]">
             <div className="space-y-1">
               <Input value={item.description} onChange={e => onChange(index, "description", e.target.value)} placeholder="توصيف البند *" className="h-8 text-xs" />
-              {matching && (
+              {/* Saved internal code badge (set server-side on save) */}
+              {item.internalCode && (
+                <div className="flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
+                  <span className="text-xs font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
+                    {item.internalCode}
+                  </span>
+                  <span className="text-xs text-emerald-500">كود إداري</span>
+                </div>
+              )}
+              {/* Live AI suggestion while typing */}
+              {!item.internalCode && matching && (
                 <p className="text-xs text-slate-400 flex items-center gap-1">
                   <Loader2 className="h-3 w-3 animate-spin" />جاري البحث في القاموس...
                 </p>
               )}
-              {!matching && suggestion && (
+              {!item.internalCode && !matching && suggestion && (
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 flex items-center gap-1">
                     <Sparkles className="h-3 w-3 text-amber-500" />
                     <span className="font-mono font-bold">{suggestion.code}</span>
-                    <span className="text-amber-400">({Math.round(suggestion.confidence * 100)}%)</span>
+                    <span className="text-amber-400">({Math.round(suggestion.score * 100)}%)</span>
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => { onChange(index, "partNo", suggestion.code); setSuggestion(null); }}
-                    className="text-xs text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded px-1.5 py-0.5 transition-colors font-medium"
-                  >
-                    ✓ تطبيق
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSuggestion(null)}
-                    className="text-xs text-slate-400 hover:text-slate-600 p-0.5"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
+                  <span className="text-xs text-slate-400">سيُطبَّق تلقائياً عند الحفظ</span>
                 </div>
               )}
             </div>
@@ -183,7 +179,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 
       // ── Pricing modal state ──
       const [pricingQ, setPricingQ]         = useState<{ id: number; quotationNo: string } | null>(null);
-      const [pricingItems, setPricingItems] = useState<{ id: number; description: string; partNo: string; unit: string; quantity: string; unitPrice: string; customerNotes: string; bestPrice: number | null }[]>([]);
+      const [pricingItems, setPricingItems] = useState<{ id: number; description: string; partNo: string; unit: string; quantity: string; unitPrice: string; customerNotes: string; bestPrice: number | null; internalCode: string }[]>([]);
       const [pricingLoading, setPricingLoading] = useState(false);
       const [pricingSaving, setPricingSaving]   = useState(false);
       const [pricingError, setPricingError]     = useState("");
@@ -235,6 +231,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
             quantity: String(it.quantity ?? ""),
             unitPrice: String(it.unitPrice ?? "0"),
             customerNotes: it.customerNotes ?? "",
+            internalCode: it.internalCode ?? "",
           })));
         } catch { setErrors({ server: "فشل في تحميل بيانات الطلب" }); }
         setOpen(true);
@@ -269,6 +266,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
             partNo: it.partNo,
             unit: it.unit,
             quantity: Number(it.quantity) || 0,
+            internalCode: it.internalCode ?? "",
           })),
         };
 
@@ -313,6 +311,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
             unitPrice: String(parseFloat(it.unitPrice ?? "0") > 0 ? parseFloat(it.unitPrice).toFixed(3) : ""),
             customerNotes: it.customerNotes ?? "",
             bestPrice: best[it.id]?.bestPrice ?? null,
+            internalCode: it.internalCode ?? "",
           })));
         } catch { setPricingError("فشل في تحميل البيانات"); }
         finally { setPricingLoading(false); }
@@ -501,10 +500,10 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
                     </div>
                   </div>
 
-                  {/* AI hint banner */}
-                  <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
-                    <Sparkles className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-                    المحرك يقترح الكود تلقائياً عند كتابة التوصيف — اضغط ✓ تطبيق لقبول الاقتراح
+                  {/* Auto-coding notice */}
+                  <div className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-700">
+                    <Sparkles className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                    محرك التكويد يربط كل بند بالكود الإداري تلقائياً عند الحفظ — الكود يظهر <CheckCircle2 className="h-3 w-3 inline text-emerald-500 mx-0.5" /> أسفل كل توصيف
                   </div>
 
                   {/* Items table */}
@@ -523,8 +522,8 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
                             <th className="px-2 py-2 font-medium text-slate-500 text-xs">كود البند</th>
                             <th className="px-2 py-2 font-medium text-slate-500 text-xs">
                               التوصيف *
-                              <span className="mr-1 text-amber-500 inline-flex items-center gap-0.5">
-                                <Sparkles className="h-3 w-3" />AI
+                              <span className="mr-1 text-emerald-600 inline-flex items-center gap-0.5">
+                                <Sparkles className="h-3 w-3" />تكويد تلقائي
                               </span>
                             </th>
                             <th className="px-2 py-2 font-medium text-slate-500 text-xs">PART NO</th>
@@ -559,7 +558,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
                 <DialogFooter className="gap-2">
                   <Button variant="outline" onClick={() => { setOpen(false); setErrors({}); }}>إلغاء</Button>
                   <Button className="bg-[#1e3a5f] hover:bg-[#162d4a]" onClick={handleSave} disabled={isSaving}>
-                    {isSaving ? <><Loader2 className="h-4 w-4 ml-2 animate-spin" /> جاري الحفظ...</> : "حفظ"}
+                    {isSaving ? <><Loader2 className="h-4 w-4 ml-2 animate-spin" /> جاري الحفظ والتكويد...</> : "حفظ وتكويد البنود"}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -586,6 +585,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
                         <table className="w-full text-sm text-right">
                           <thead className="bg-slate-50 border-b">
                             <tr>
+                              <th className="px-3 py-2 font-medium text-slate-500 text-xs">الكود الإداري</th>
                               <th className="px-3 py-2 font-medium text-slate-500 text-xs">التوصيف</th>
                               <th className="px-3 py-2 font-medium text-slate-500 text-xs">PART NO</th>
                               <th className="px-3 py-2 font-medium text-slate-500 text-xs">الوحدة</th>
@@ -598,6 +598,15 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
                           <tbody>
                             {pricingItems.map((it, idx) => (
                               <tr key={it.id} className="border-t">
+                                <td className="px-3 py-2">
+                                  {it.internalCode ? (
+                                    <span className="text-xs font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
+                                      {it.internalCode}
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs text-slate-300">—</span>
+                                  )}
+                                </td>
                                 <td className="px-3 py-2 text-xs text-slate-700">{it.description}</td>
                                 <td className="px-3 py-2 text-xs text-slate-500" dir="ltr">{it.partNo || "—"}</td>
                                 <td className="px-3 py-2 text-xs text-slate-500">{it.unit || "—"}</td>
@@ -656,4 +665,3 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
         </AppLayout>
       );
     }
-    
