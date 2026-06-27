@@ -135,6 +135,13 @@ async function copyTokenLink(token: string, setCopied: (id: string) => void) {
   }
 }
 
+function fmtQty(val: string | number | null | undefined): string {
+  if (val === null || val === undefined || val === "") return "";
+  const n = parseFloat(String(val));
+  if (isNaN(n)) return String(val ?? "");
+  return n % 1 === 0 ? String(Math.round(n)) : String(parseFloat(n.toFixed(10)));
+}
+
 async function downloadRfqPdf(rfq: Rfq, sup: RfqSupplier) {
     const win = window.open("", "_blank", "width=960,height=700");
     if (!win) { alert("يرجى السماح بالنوافذ المنبثقة في المتصفح"); return; }
@@ -177,7 +184,7 @@ async function downloadRfqPdf(rfq: Rfq, sup: RfqSupplier) {
       <td style="padding:7px 10px;text-align:right;font-size:12px">${it.description??""}</td>
       <td style="padding:7px 10px;text-align:center;font-size:11px;color:#475569">${it.partNo??""}</td>
       <td style="padding:7px 10px;text-align:center;font-size:11px">${it.unit??""}</td>
-      <td style="padding:7px 10px;text-align:center;font-size:12px;font-weight:600">${it.quantity??""}</td>
+      <td style="padding:7px 10px;text-align:center;font-size:12px;font-weight:600">${fmtQty(it.quantity)}</td>
     </tr>`).join("");
 
     const html=`<!DOCTYPE html><html dir="rtl" lang="ar"><head>
@@ -239,7 +246,7 @@ async function downloadRfqPdf(rfq: Rfq, sup: RfqSupplier) {
   }
 function buildWhatsAppMessage(rfqNo: string, requestDate: string, companyName: string, items: RfqItem[], token?: string) {
   const lines = items.map((item, idx) =>
-    `${idx + 1}. ${item.description}${item.partNo ? ` | رقم القطعة: ${item.partNo}` : ""} — الكمية: ${item.quantity} ${item.unit || ""}`.trim()
+    `${idx + 1}. ${item.description}${item.partNo ? ` | رقم القطعة: ${item.partNo}` : ""} — الكمية: ${fmtQty(item.quantity)} ${item.unit || ""}`.trim()
   ).join("\n");
   const linkLine = token ? `\n\n🔗 *رابط إدخال الأسعار إلكترونياً:*\n${getRfqLink(token)}` : "";
   return `🔷 *طلب تسعير - ${rfqNo}*\n📅 التاريخ: ${requestDate}\n\nالسادة / ${companyName}\n\nنرجو تفضلكم بتقديم عرض سعر للبنود التالية:\n\n${lines}${linkLine}\n\nشاكرين لكم حسن تعاونكم 🙏`;
@@ -377,7 +384,7 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
         return `<td style="padding:8px;border-bottom:1px solid #eee;text-align:center;background:${isBest ? '#f0fdf4' : 'transparent'}">${price !== null && price > 0 ? `<div style="font-family:monospace;font-weight:${isBest ? '700' : '500'};color:${isBest ? '#15803d' : '#1e293b'}">${price.toFixed(3)}${isBest ? ' ★' : ''}</div><div style="font-family:monospace;font-size:10px;color:#94a3b8">${(price * qty).toFixed(3)}</div>` : '<span style="color:#cbd5e1">—</span>'}</td>`;
       }).join('');
       const bestCell = best !== null ? `<td style="padding:8px;border-bottom:1px solid #eee;text-align:center;background:#eff6ff;font-family:monospace;font-weight:700;color:#1d4ed8">${best.toFixed(3)}</td>` : `<td style="padding:8px;border-bottom:1px solid #eee;text-align:center;color:#cbd5e1">—</td>`;
-      return `<tr style="background:${idx % 2 === 0 ? '#fff' : '#f8fafc'}"><td style="padding:8px 10px;border-bottom:1px solid #eee;font-weight:500">${item.description}${item.partNo ? `<div style='font-size:10px;color:#94a3b8'>${item.partNo}</div>` : ''}</td><td style="padding:8px;border-bottom:1px solid #eee;text-align:center;font-size:11px;color:#64748b;font-family:monospace">${item.quantity} ${item.unit || ''}</td>${cells}${bestCell}</tr>`;
+      return `<tr style="background:${idx % 2 === 0 ? '#fff' : '#f8fafc'}"><td style="padding:8px 10px;border-bottom:1px solid #eee;font-weight:500">${item.description}${item.partNo ? `<div style='font-size:10px;color:#94a3b8'>${item.partNo}</div>` : ''}</td><td style="padding:8px;border-bottom:1px solid #eee;text-align:center;font-size:11px;color:#64748b;font-family:monospace">${fmtQty(item.quantity)} ${item.unit || ''}</td>${cells}${bestCell}</tr>`;
     }).join('');
     const totalCells = submittedSuppliers.map(s => { const t = getSupplierTotal(s); const isBest = s.companyName === bestName && t > 0; return `<td style="padding:10px 8px;text-align:center;font-family:monospace;font-weight:700;color:${isBest ? '#15803d' : '#334155'};background:${isBest ? '#f0fdf4' : 'transparent'}">${t > 0 ? t.toFixed(3) : '—'}${isBest ? ' ★' : ''}</td>`; }).join('');
     const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>تحليل الأسعار - ${rfqNo}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#111;padding:12mm 16mm}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f2240;padding-bottom:14px;margin-bottom:18px}.logo h1{font-size:20px;font-weight:bold;color:#0f2240}.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}.kpi{border-radius:8px;padding:12px;text-align:center}.kpi .num{font-size:26px;font-weight:bold}.section-title{font-size:12px;font-weight:bold;color:#0f2240;border-right:3px solid #0064d9;padding-right:8px;margin-bottom:10px}table{width:100%;border-collapse:collapse}th{padding:10px 8px;background:#0f2240;color:#fff;font-size:11px;text-align:right}@media print{@page{margin:10mm}body{padding:0}}</style></head><body>
@@ -537,7 +544,7 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
                                   <div className="truncate max-w-[180px]" title={item.description}>{item.description}</div>
                                   {item.partNo && <div className="text-[10px] text-slate-400">{item.partNo}</div>}
                                 </td>
-                                <td className="px-3 py-2 text-center text-slate-500 font-mono text-[11px]">{item.quantity} {item.unit}</td>
+                                <td className="px-3 py-2 text-center text-slate-500 font-mono text-[11px]">{fmtQty(item.quantity)} {item.unit}</td>
                                 {submittedSuppliers.map(s => {
                                   const price = getPrice(s, item.id);
                                   const qty = parseFloat(item.quantity) || 0;
@@ -857,7 +864,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                             <td className="px-3 py-1.5 text-slate-400">{idx + 1}</td>
                             <td className="px-3 py-1.5 font-medium">{item.description}</td>
                             <td className="px-3 py-1.5 text-slate-500">{item.partNo || "—"}</td>
-                            <td className="px-3 py-1.5 font-mono">{item.quantity} {item.unit}</td>
+                            <td className="px-3 py-1.5 font-mono">{fmtQty(item.quantity)} {item.unit}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -907,7 +914,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                           <td className="px-3 py-1.5 font-medium">{item.description}</td>
                           <td className="px-3 py-1.5 text-slate-500 font-mono">{item.customerItemCode || "—"}</td>
                           <td className="px-3 py-1.5 text-slate-500 font-mono">{item.partNo || "—"}</td>
-                          <td className="px-3 py-1.5 text-center font-mono">{item.quantity}</td>
+                          <td className="px-3 py-1.5 text-center font-mono">{fmtQty(item.quantity)}</td>
                           <td className="px-3 py-1.5 text-center text-slate-500">{item.unit || "—"}</td>
                         </tr>
                       );
@@ -1025,7 +1032,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                         <tr key={item.id} className={`border-b border-slate-100 last:border-0 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
                           <td className="px-3 py-1 text-slate-400">{idx + 1}</td>
                           <td className="px-3 py-1 font-medium truncate max-w-[200px]">{item.description}</td>
-                          <td className="px-3 py-1 text-center font-mono">{item.quantity}</td>
+                          <td className="px-3 py-1 text-center font-mono">{fmtQty(item.quantity)}</td>
                           <td className="px-3 py-1 text-center text-slate-500">{item.unit || "—"}</td>
                         </tr>
                       ))}
@@ -1628,7 +1635,7 @@ export default function SupplierQuotationsPage() {
                                               {item.description}
                                               {item.partNo && <span className="text-slate-400 mr-1.5 text-[10px] font-mono">{item.partNo}</span>}
                                             </td>
-                                            <td className="px-2 py-1.5 text-center font-mono">{item.quantity}</td>
+                                            <td className="px-2 py-1.5 text-center font-mono">{fmtQty(item.quantity)}</td>
                                             <td className="px-2 py-1.5 text-center text-slate-500">{item.unit || "—"}</td>
                                           </tr>
                                         ))}
