@@ -1,9 +1,62 @@
 import { Router } from "express";
     import { pool } from "@workspace/db";
+    import { extractFingerprint, fingerprintHash, nextInternalCode } from "../lib/item-coding-engine";
 
     const router = Router();
 
-    // GET /api/items — all items from customer quotation requests (oldest first)
+    // ── Shared helper: match or auto-create canonical item ───────────────────
+    async function resolveCode(description: string): Promise<string> {
+      if (!description.trim()) return "";
+      const desc = description.trim().toLowerCase();
+      try {
+        const { rows } = await pool.query<{ internal_code: string; score: number }>(`
+          SELECT internal_code,
+            (
+              CASE
+                WHEN LOWER(description_en) = $2 THEN 20
+                WHEN LOWER(description_ar) = $2 THEN 20
+                WHEN LOWER(description_en) ILIKE $1 THEN 12
+                WHEN LOWER(description_ar) ILIKE $1 THEN 12
+                WHEN $2 ILIKE '%' || LOWER(description_en) || '%' AND LENGTH(description_en) > 4 THEN 8
+                WHEN $2 ILIKE '%' || LOWER(description_ar) || '%' AND LENGTH(description_ar) > 4 THEN 8
+                ELSE 0
+              END
+              + COALESCE((
+                  SELECT COUNT(*)::int FROM unnest(keywords) k
+                  WHERE LENGTH(k) > 2 AND $2 ILIKE '%' || LOWER(k) || '%'
+                ), 0)
+            ) AS score
+          FROM canonical_items
+          WHERE
+            LOWER(description_en) ILIKE $1 OR LOWER(description_ar) ILIKE $1
+            OR $2 ILIKE '%' || LOWER(description_en) || '%'
+            OR $2 ILIKE '%' || LOWER(description_ar) || '%'
+            OR EXISTS (SELECT 1 FROM unnest(keywords) k WHERE LENGTH(k) > 2 AND $2 ILIKE '%' || LOWER(k) || '%')
+          ORDER BY score DESC LIMIT 1
+        `, [`%${desc}%`, desc]);
+
+        if (rows[0] && rows[0].score >= 3) return rows[0].internal_code;
+
+        // No match — auto-create
+        const fp = extractFingerprint(description.trim());
+        const hash = fingerprintHash(fp);
+        const category = (fp.category as string | undefined)?.trim() ?? "";
+        const brand    = (fp.brand    as string | undefined)?.trim() ?? "";
+        const keywords = Array.isArray(fp.keywords) ? fp.keywords as string[] : [];
+        const newCode  = await nextInternalCode(category || undefined);
+        await pool.query(`
+          INSERT INTO canonical_items
+            (internal_code, brand, category, description_en, description_ar, keywords, notes, fingerprint, fingerprint_hash)
+          VALUES ($1,$2,$3,$4,'',$5,'', $6,$7)
+          ON CONFLICT (internal_code) DO NOTHING
+        `, [newCode, brand, category, description.trim(), keywords, JSON.stringify(fp), hash]);
+        return newCode;
+      } catch {
+        return "";
+      }
+    }
+
+    // GET /api/items — all items (with canonical code resolved via JOIN)
     router.get("/", async (req, res) => {
       try {
         const { rows } = await pool.query(`
@@ -32,6 +85,43 @@ import { Router } from "express";
         res.json(rows);
       } catch (err: any) {
         res.status(500).json({ error: "فشل في جلب البنود", details: err.message });
+      }
+    });
+
+    // POST /api/items/backfill-codes — auto-code all items missing an internal_code
+    router.post("/backfill-codes", async (req, res) => {
+      try {
+        // Ensure column exists
+        await pool.query(`
+          ALTER TABLE customer_quotation_items
+            ADD COLUMN IF NOT EXISTS internal_code TEXT NOT NULL DEFAULT '',
+            ADD COLUMN IF NOT EXISTS internal_code_score NUMERIC(6,2) NOT NULL DEFAULT 0
+        `).catch(() => {});
+
+        const { rows: uncoded } = await pool.query<{ id: number; description: string }>(`
+          SELECT id, description FROM customer_quotation_items
+          WHERE TRIM(internal_code) = '' OR internal_code IS NULL
+            AND TRIM(description) <> ''
+        `);
+
+        let coded = 0;
+        let failed = 0;
+        for (const row of uncoded) {
+          const code = await resolveCode(row.description);
+          if (code) {
+            await pool.query(
+              `UPDATE customer_quotation_items SET internal_code = $1 WHERE id = $2`,
+              [code, row.id]
+            );
+            coded++;
+          } else {
+            failed++;
+          }
+        }
+
+        res.json({ total: uncoded.length, coded, failed });
+      } catch (err: any) {
+        res.status(500).json({ error: "فشل في تكويد البنود", details: err.message });
       }
     });
 
