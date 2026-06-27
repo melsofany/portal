@@ -15,7 +15,7 @@ import { Router } from "express";
             cqi.unit,
             cqi.quantity,
             cqi.sort_order,
-            cqi.internal_code,
+            COALESCE(cqi.internal_code, ci.internal_code) AS internal_code,
             cq.quotation_no,
             cq.request_date,
             cq.status        AS quotation_status,
@@ -24,6 +24,9 @@ import { Router } from "express";
           FROM customer_quotation_items cqi
           JOIN customer_quotations cq ON cq.id = cqi.quotation_id
           LEFT JOIN customers cu ON cu.id = cq.customer_id
+          LEFT JOIN canonical_items ci
+            ON LOWER(TRIM(ci.description_en)) = LOWER(TRIM(cqi.description))
+            OR LOWER(TRIM(ci.description_ar)) = LOWER(TRIM(cqi.description))
           ORDER BY cq.created_at ASC, cqi.sort_order ASC
         `);
         res.json(rows);
@@ -47,7 +50,7 @@ import { Router } from "express";
             cqi.unit,
             cqi.quantity                  AS quoted_qty,
             cqi.unit_price                AS quoted_unit_price,
-            cqi.internal_code,
+            COALESCE(cqi.internal_code, ci.internal_code) AS internal_code,
             cq.id                         AS quotation_id,
             cq.quotation_no,
             cq.request_date,
@@ -67,6 +70,9 @@ import { Router } from "express";
           LEFT JOIN customers cu       ON cu.id  = cq.customer_id
           LEFT JOIN customer_order_items coi ON coi.quotation_item_id = cqi.id
           LEFT JOIN customer_orders co       ON co.id = coi.order_id
+          LEFT JOIN canonical_items ci
+            ON LOWER(TRIM(ci.description_en)) = LOWER(TRIM(cqi.description))
+            OR LOWER(TRIM(ci.description_ar)) = LOWER(TRIM(cqi.description))
           WHERE LOWER(TRIM(cqi.description)) = LOWER(TRIM($1))
           ORDER BY cq.created_at ASC
         `, [description]);
@@ -111,4 +117,3 @@ import { Router } from "express";
     });
 
     export default router;
-  
