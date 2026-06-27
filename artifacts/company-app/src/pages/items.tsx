@@ -481,6 +481,25 @@ function CodingTab() {
                     </span>
                   )}
                 </div>
+                  {(matchResult as any).method && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[10px] font-semibold border ${
+                        (matchResult as any).method === "gemini"
+                          ? "bg-purple-50 text-purple-700 border-purple-200"
+                          : (matchResult as any).method === "hash"
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : "bg-slate-50 text-slate-600 border-slate-200"
+                      }`}>
+                        {(matchResult as any).method === "gemini" ? "✦ Gemini AI" : (matchResult as any).method === "hash" ? "⚡ تطابق فوري" : "⚙ قاعدي"}
+                      </span>
+                    </div>
+                  )}
+                  {(matchResult as any).reasoning && (
+                    <div className="flex items-start gap-2 bg-purple-50 border border-purple-200 rounded-sm px-3 py-2">
+                      <span className="text-purple-500 text-xs mt-0.5 shrink-0">✦</span>
+                      <p className="text-xs text-purple-800 font-medium leading-relaxed">{(matchResult as any).reasoning}</p>
+                    </div>
+                  )}
 
                 {Object.keys(matchResult.fingerprint).length > 0 && (
                   <div>
