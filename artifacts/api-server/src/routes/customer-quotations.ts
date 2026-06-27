@@ -15,13 +15,27 @@ import { extractFingerprint, fingerprintHash, nextInternalCode } from "../lib/it
 
 const router = Router();
 
-function generateQuotationNo(): string {
+async function generateQuotationNo(): Promise<string> {
   const now = new Date();
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, "0");
   const d = String(now.getDate()).padStart(2, "0");
-  const rand = Math.floor(1000 + Math.random() * 9000);
-  return `CQ-${y}${m}${d}-${rand}`;
+  const prefix = `CQ-${y}${m}${d}-`;
+
+  // Find the highest sequence number used today
+  const { rows } = await pool.query<{ quotation_no: string }>(
+    `SELECT quotation_no FROM customer_quotations WHERE quotation_no LIKE $1 ORDER BY quotation_no DESC LIMIT 1`,
+    [`${prefix}%`]
+  );
+
+  let seq = 1;
+  if (rows[0]) {
+    const last = rows[0].quotation_no.replace(prefix, "");
+    const n = parseInt(last, 10);
+    if (!isNaN(n)) seq = n + 1;
+  }
+
+  return `${prefix}${String(seq).padStart(4, "0")}`;
 }
 
 /**
