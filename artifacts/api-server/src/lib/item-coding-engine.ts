@@ -188,23 +188,18 @@ import crypto from "crypto";
 
   // ── Next internal code ────────────────────────────────────────────────────
 
-  export async function nextInternalCode(category?: string): Promise<string> {
-    const prefix = (category && CATEGORY_PREFIX_MAP[category]) ? CATEGORY_PREFIX_MAP[category] : DEFAULT_PREFIX;
-
+  export async function nextInternalCode(_category?: string): Promise<string> {
     try {
-      // Find the max existing sequence number for this prefix
+      // Global sequential number — no letter prefix
       const { rows } = await pool.query<{ max_seq: string | null }>(
-        `SELECT MAX(CAST(REGEXP_REPLACE(internal_code, '^[A-Z]+-', '') AS INTEGER)) AS max_seq
+        `SELECT MAX(CAST(internal_code AS INTEGER)) AS max_seq
          FROM canonical_items
-         WHERE internal_code ~ ('^' || $1 || '-[0-9]+$')`,
-        [prefix]
+         WHERE internal_code ~ '^[0-9]+$'`
       );
       const maxSeq = parseInt(rows[0]?.max_seq ?? "0", 10) || 0;
-      const nextSeq = String(maxSeq + 1).padStart(6, "0");
-      return `${prefix}-${nextSeq}`;
+      return String(maxSeq + 1).padStart(6, "0");
     } catch {
-      const ts = Date.now().toString().slice(-6);
-      return `${prefix}-${ts}`;
+      return String(Date.now()).slice(-6);
     }
   }
 
