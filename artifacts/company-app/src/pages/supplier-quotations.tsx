@@ -135,101 +135,29 @@ async function copyTokenLink(token: string, setCopied: (id: string) => void) {
   }
 }
 
-function printRfqForSupplier(
-  rfqNo: string, requestDate: string, sourceNo: string, customerOrderNo: string,
-  notes: string, supplier: RfqSupplier | Supplier, items: RfqItem[], token?: string
-) {
-  const companyName = supplier.companyName;
-  const link = token ? getRfqLink(token) : "";
-  const html = `<!DOCTYPE html>
-<html dir="rtl" lang="ar">
-<head>
-<meta charset="UTF-8">
-<title>طلب تسعير - ${rfqNo}</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #111; padding: 15mm 20mm; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #0064d9; padding-bottom: 14px; margin-bottom: 18px; }
-  .logo-area h1 { font-size: 22px; font-weight: bold; color: #0064d9; }
-  .logo-area p { font-size: 11px; color: #555; margin-top: 4px; }
-  .rfq-info { text-align: left; font-size: 11px; color: #555; }
-  .rfq-info strong { display: block; font-size: 14px; color: #111; }
-  .meta-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 18px; }
-  .meta-box { background: #f4f7fb; border: 1px solid #dde3ee; border-radius: 4px; padding: 8px 12px; }
-  .meta-box .label { font-size: 10px; color: #666; font-weight: bold; }
-  .meta-box .value { font-size: 12px; color: #111; margin-top: 3px; font-weight: 600; }
-  .supplier-box { background: #eaf2ff; border: 1px solid #b3d0f5; border-radius: 4px; padding: 10px 14px; margin-bottom: 16px; }
-  .supplier-box .label { font-size: 10px; color: #0064d9; font-weight: bold; }
-  .supplier-box .value { font-size: 13px; color: #0a3060; font-weight: 700; margin-top: 3px; }
-  .link-box { background: #f0fdf4; border: 1px solid #86efac; border-radius: 4px; padding: 10px 14px; margin-bottom: 16px; font-size: 11px; }
-  .link-box strong { color: #166534; }
-  .link-box a { color: #0064d9; word-break: break-all; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
-  thead tr { background: #0064d9; color: white; }
-  th { padding: 9px 10px; font-size: 11px; font-weight: 600; text-align: right; }
-  td { padding: 8px 10px; font-size: 11px; border-bottom: 1px solid #e8e8e8; text-align: right; }
-  tr:nth-child(even) td { background: #f7f9fc; }
-  .notes-box { background: #fffbea; border: 1px solid #e8d87a; border-radius: 4px; padding: 10px 14px; margin-bottom: 16px; font-size: 11px; }
-  .footer { text-align: center; color: #888; font-size: 10px; border-top: 1px solid #ddd; padding-top: 12px; margin-top: 20px; }
-  @media print { @page { margin: 10mm; } body { padding: 0; } }
-</style>
-</head>
-<body>
-<div class="header">
-  <div class="logo-area">
-    <h1>طلب تسعير</h1>
-    <p>يرجى تقديم عرض سعر للبنود المدرجة أدناه</p>
-  </div>
-  <div class="rfq-info">
-    <strong>${rfqNo}</strong>
-    تاريخ: ${requestDate}
-  </div>
-</div>
-<div class="supplier-box">
-  <div class="label">مقدم إلى</div>
-  <div class="value">${companyName}</div>
-</div>
-<div class="meta-grid">
-  <div class="meta-box"><div class="label">رقم طلب التسعير المرجعي</div><div class="value">${sourceNo || "—"}</div></div>
-  <div class="meta-box"><div class="label">رقم أمر الشراء</div><div class="value">${customerOrderNo || "—"}</div></div>
-  <div class="meta-box"><div class="label">عدد البنود</div><div class="value">${items.length} بند</div></div>
-</div>
-${link ? `<div class="link-box"><strong>رابط إدخال الأسعار إلكترونياً:</strong><br/><a href="${link}">${link}</a></div>` : ""}
-<table>
-  <thead>
-    <tr>
-      <th style="width:40px">#</th>
-      <th>الوصف</th>
-      <th style="width:100px">رقم القطعة</th>
-      <th style="width:80px">كود البند</th>
-      <th style="width:60px">الوحدة</th>
-      <th style="width:70px">الكمية</th>
-      <th style="width:110px">سعر الوحدة</th>
-      <th style="width:110px">الإجمالي</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${items.map((item, idx) => `
-    <tr>
-      <td>${idx + 1}</td>
-      <td>${item.description}</td>
-      <td>${item.partNo || "—"}</td>
-      <td>${item.customerItemCode || "—"}</td>
-      <td>${item.unit || "—"}</td>
-      <td>${item.quantity}</td>
-      <td></td>
-      <td></td>
-    </tr>`).join("")}
-  </tbody>
-</table>
-${notes ? `<div class="notes-box"><strong>ملاحظات:</strong> ${notes}</div>` : ""}
-<div class="footer">يرجى الرد في أقرب وقت ممكن — نشكر حسن تعاونكم</div>
-</body>
-</html>`;
-  const win = window.open("", "_blank", "width=900,height=700");
-  if (win) { win.document.write(html); win.document.close(); win.focus(); setTimeout(() => win.print(), 600); }
-}
+async function downloadRfqPdf(rfqId: number, supplierId: number) {
+    const token = getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    try {
+      const res = await fetch(`${API_BASE}/api/supplier-quotations/${rfqId}/pdf/${supplierId}`, {
+        credentials: "include",
+        headers,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as any;
+        alert(err.error ?? "فشل في توليد الـ PDF");
+        return;
+      }
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+    } catch {
+      alert("فشل في الاتصال بالخادم");
+    }
+  }
 
+  
 function buildWhatsAppMessage(rfqNo: string, requestDate: string, companyName: string, items: RfqItem[], token?: string) {
   const lines = items.map((item, idx) =>
     `${idx + 1}. ${item.description}${item.partNo ? ` | رقم القطعة: ${item.partNo}` : ""} — الكمية: ${item.quantity} ${item.unit || ""}`.trim()
@@ -1137,7 +1065,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                           {/* Action buttons */}
                           <div className="flex gap-1 shrink-0">
                             <button className="flex items-center gap-0.5 px-2 py-0.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[10px] rounded-sm transition-colors"
-                              onClick={() => printRfqForSupplier(rfq.rfqNo, rfq.requestDate, rfq.sourceQuotationNo, rfq.customerOrderNo, rfq.notes, sup, rfq.items, sup?.token)}>
+                              onClick={() => downloadRfqPdf(rfq.id, sup.supplierId)}>
                               <FileText className="h-3 w-3" /> PDF
                             </button>
                             <button className="flex items-center gap-0.5 px-2 py-0.5 border border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-700 text-[10px] rounded-sm transition-colors"
@@ -1683,7 +1611,7 @@ export default function SupplierQuotationsPage() {
                                               <td className="px-2 py-1.5 text-center">
                                                 <div className="flex items-center justify-center gap-1">
                                                   <button title="PDF"
-                                                    onClick={() => printRfqForSupplier(rfq.rfqNo, rfq.requestDate, rfq.sourceQuotationNo, rfq.customerOrderNo, rfq.notes, sup, rfq.items, sup.token)}
+                                                    onClick={() => downloadRfqPdf(rfq.id, sup.supplierId)}
                                                     className="p-1 border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 rounded-sm transition-colors">
                                                     <FileText className="h-3 w-3" />
                                                   </button>
