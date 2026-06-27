@@ -136,125 +136,106 @@ async function copyTokenLink(token: string, setCopied: (id: string) => void) {
 }
 
 async function downloadRfqPdf(rfq: Rfq, sup: RfqSupplier) {
-    // Open window FIRST (synchronously) — iOS Safari blocks window.open() after await
     const win = window.open("", "_blank", "width=960,height=700");
     if (!win) { alert("يرجى السماح بالنوافذ المنبثقة في المتصفح"); return; }
     win.document.write('<html dir="rtl"><body style="font-family:Arial;padding:40px;text-align:center;color:#1e3a8a"><p>جاري تحميل الـ PDF…</p></body></html>');
 
-    // Fetch company settings (public, no auth needed)
-    let companyName = "", companyPhone = "", companyAddress = "", logoUrl = "";
+    let companyName="",companyPhone="",companyAddress="",logoUrl="",companyEmail="",commercialReg="",taxReg="";
     try {
       const s = await fetch(`${API_BASE}/api/settings/public`);
       if (s.ok) {
         const j = await s.json() as any;
-        companyName = j.name ?? ""; companyPhone = j.phone ?? "";
-        companyAddress = j.address ?? ""; logoUrl = j.logoUrl ?? "";
+        companyName=j.name??""; companyPhone=j.phone??""; companyAddress=j.address??"";
+        logoUrl=j.logoUrl??""; companyEmail=j.email??""; commercialReg=j.commercialReg??""; taxReg=j.taxReg??"";
       }
-    } catch { /* ignore */ }
+    } catch {}
 
-    // Decode JWT payload to get sender name (no sig check)
     let senderName = "";
     try {
       const tok = getAuthToken();
       if (tok) {
-        const payload = JSON.parse(atob(tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
-        senderName = (payload.fullName ?? payload.name ?? "") as string;
+        const p = JSON.parse(atob(tok.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")));
+        senderName = (p.fullName ?? p.name ?? "") as string;
       }
-    } catch { /* ignore */ }
+    } catch {}
 
-    // Fetch sender phone from /employees/me
     let senderPhone = "";
     try {
       const r = await authFetch(`${API_BASE}/api/employees/me`);
       if (r.ok) { const e = await r.json() as any; senderPhone = e.phone ?? ""; }
-    } catch { /* ignore */ }
+    } catch {}
 
     const logoHtml = logoUrl
-      ? `<img src="${logoUrl}" alt="logo" style="max-height:60px;max-width:140px;object-fit:contain"/>`
-      : `<div style="width:54px;height:54px;background:#1e4080;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:700">${companyName.slice(0,1)}</div>`;
+      ? `<img src="${logoUrl}" alt="logo" style="max-height:65px;max-width:150px;object-fit:contain"/>`
+      : (companyName ? `<div style="width:56px;height:56px;background:#1e4080;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:700">${companyName.slice(0,1)}</div>` : "");
 
-    const tableRows = rfq.items.map((item, i) => `
-      <tr style="border-bottom:1px solid #e2e8f0;background:${i % 2 === 0 ? "#fff" : "#f8fafc"}">
-        <td style="padding:7px 10px;text-align:center;color:#64748b;font-size:11px">${i + 1}</td>
-        <td style="padding:7px 10px;text-align:right;font-size:12px">${item.description ?? ""}</td>
-        <td style="padding:7px 10px;text-align:center;font-size:11px;color:#475569">${item.partNo ?? ""}</td>
-        <td style="padding:7px 10px;text-align:center;font-size:11px">${item.unit ?? ""}</td>
-        <td style="padding:7px 10px;text-align:center;font-size:12px;font-weight:600">${item.quantity ?? ""}</td>
-      </tr>`).join("");
+    const infoLine = [companyPhone?"📞 "+companyPhone:"",companyEmail?"✉ "+companyEmail:"",companyAddress?"📍 "+companyAddress:""].filter(Boolean).join("  ·  ");
+    const regLine  = [commercialReg?"السجل التجاري: "+commercialReg:"",taxReg?"الرقم الضريبي: "+taxReg:""].filter(Boolean).join("  |  ");
 
-    const html = `<!DOCTYPE html>
-  <html dir="rtl" lang="ar">
-  <head>
-    <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-    <title>طلب تسعير ${rfq.rfqNo}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet"/>
-    <style>
-      *{box-sizing:border-box;margin:0;padding:0}
-      body{font-family:'Cairo',Arial,sans-serif;direction:rtl;background:#fff;color:#1e293b}
-      @media print{@page{size:A4;margin:10mm}body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.no-print{display:none!important}}
-      .page{max-width:794px;margin:0 auto}
-      .hdr{background:#0f2240;color:#fff;padding:16px 28px;display:flex;align-items:center;justify-content:space-between;gap:16px}
-      .hdr-info{text-align:right;flex:1}
-      .hdr-title{font-size:17px;font-weight:700}
-      .hdr-co{font-size:12px;color:#cbd5e1;margin-top:3px}
-      .hdr-det{font-size:10px;color:#94a3b8;margin-top:3px}
-      .body{padding:18px 28px}
-      .rfqbox{background:#f0f7ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 14px;margin-bottom:14px}
-      .rfqlbl{font-size:9px;color:#3b82f6}.rfqval{font-size:16px;font-weight:700;color:#1e3a8a}
-      .igrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
-      .ibox{background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:7px 12px}
-      .ilbl{font-size:9px;color:#64748b}.ival{font-size:12px;font-weight:600;color:#1e293b}
-      table{width:100%;border-collapse:collapse;border:1px solid #e2e8f0}
-      thead tr{background:#1e3a5f}
-      thead th{padding:9px 10px;text-align:center;color:#fff;font-size:10px;font-weight:600}
-      .nbox{margin-top:14px;background:#fffbeb;border:1px solid #fde68a;border-radius:5px;padding:10px 14px}
-      .nlbl{font-size:9px;color:#92400e;margin-bottom:3px}.ntxt{font-size:11px;color:#78350f}
-      .srow{margin-top:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:10px 16px;display:flex;gap:28px;flex-wrap:wrap}
-      .slbl{font-size:9px;color:#64748b;margin-bottom:2px}.sval{font-size:12px;font-weight:600}
-      .pbtn{position:fixed;bottom:20px;left:20px;background:#1e3a8a;color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:14px;font-family:'Cairo',Arial,sans-serif;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.3)}
-    </style>
-  </head>
-  <body>
+    const rows = rfq.items.map((it,i)=>`<tr style="border-bottom:1px solid #e2e8f0;background:${i%2===0?"#fff":"#f8fafc"}">
+      <td style="padding:7px 10px;text-align:center;color:#64748b;font-size:11px">${i+1}</td>
+      <td style="padding:7px 10px;text-align:right;font-size:12px">${it.description??""}</td>
+      <td style="padding:7px 10px;text-align:center;font-size:11px;color:#475569">${it.partNo??""}</td>
+      <td style="padding:7px 10px;text-align:center;font-size:11px">${it.unit??""}</td>
+      <td style="padding:7px 10px;text-align:center;font-size:12px;font-weight:600">${it.quantity??""}</td>
+    </tr>`).join("");
+
+    const html=`<!DOCTYPE html><html dir="rtl" lang="ar"><head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>طلب تسعير ${rfq.rfqNo}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <style>
+  *{box-sizing:border-box;margin:0;padding:0}body{font-family:'Cairo',Arial,sans-serif;direction:rtl;background:#fff;color:#1e293b}
+  @media print{@page{size:A4;margin:8mm}body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.no-print{display:none!important}}
+  .page{max-width:794px;margin:0 auto}
+  .hdr{background:#0f2240;color:#fff;padding:14px 22px;display:flex;align-items:center;gap:14px}
+  .hi{text-align:right;flex:1}.ht{font-size:16px;font-weight:700}.hc{font-size:13px;color:#e2e8f0;margin-top:2px;font-weight:600}
+  .hd{font-size:10px;color:#94a3b8;margin-top:3px;line-height:1.7}.hr{font-size:9px;color:#7dd3fc;margin-top:2px}
+  .bd{padding:16px 22px}
+  .rb{background:#f0f7ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 14px;margin-bottom:12px}
+  .rl{font-size:9px;color:#3b82f6}.rv{font-size:16px;font-weight:700;color:#1e3a8a}
+  .ig{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:12px}
+  .ib{background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:6px 10px}
+  .il{font-size:9px;color:#64748b}.iv{font-size:12px;font-weight:600;color:#1e293b}
+  table{width:100%;border-collapse:collapse;border:1px solid #e2e8f0}
+  thead tr{background:#1e3a5f}thead th{padding:8px 10px;text-align:center;color:#fff;font-size:10px;font-weight:600}
+  .nb{margin-top:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:5px;padding:9px 12px}
+  .nl{font-size:9px;color:#92400e;margin-bottom:2px}.nt{font-size:11px;color:#78350f}
+  .sr{margin-top:12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:5px;padding:9px 14px;display:flex;gap:24px;flex-wrap:wrap}
+  .sl{font-size:9px;color:#0369a1;margin-bottom:2px}.sv{font-size:12px;font-weight:600;color:#0c4a6e}
+  .pbtn{position:fixed;bottom:20px;left:20px;background:#1e3a8a;color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:14px;font-family:'Cairo',Arial,sans-serif;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.3)}
+  </style></head><body>
   <div class="page">
     <div class="hdr">
       <div>${logoHtml}</div>
-      <div class="hdr-info">
-        <div class="hdr-title">طلب تسعير / Request for Quotation</div>
-        <div class="hdr-co">${companyName}</div>
-        ${companyPhone || companyAddress ? `<div class="hdr-det">${companyPhone ? "📞 " + companyPhone : ""}${companyPhone && companyAddress ? "  ·  " : ""}${companyAddress}</div>` : ""}
+      <div class="hi">
+        <div class="ht">طلب تسعير / Request for Quotation</div>
+        <div class="hc">${companyName}</div>
+        ${infoLine?'<div class="hd">'+infoLine+'</div>':""}
+        ${regLine?'<div class="hr">'+regLine+'</div>':""}
       </div>
     </div>
-    <div class="body">
-      <div class="rfqbox">
-        <div class="rfqlbl">رقم طلب التسعير / RFQ No.</div>
-        <div class="rfqval">${rfq.rfqNo}</div>
+    <div class="bd">
+      <div class="rb"><div class="rl">رقم طلب التسعير / RFQ No.</div><div class="rv">${rfq.rfqNo}</div></div>
+      <div class="ig">
+        <div class="ib"><div class="il">آخر موعد للتسعير</div><div class="iv">${rfq.requestDate}</div></div>
+        <div class="ib"><div class="il">المورد / Supplier</div><div class="iv">${sup.companyName}</div></div>
+        <div class="ib"><div class="il">تاريخ الإصدار</div><div class="iv">${new Date().toLocaleDateString("ar-EG")}</div></div>
       </div>
-      <div class="igrid">
-        <div class="ibox"><div class="ilbl">آخر موعد للتسعير</div><div class="ival">${rfq.requestDate}</div></div>
-        <div class="ibox"><div class="ilbl">المورد / Supplier</div><div class="ival">${sup.companyName}</div></div>
-        <div class="ibox"><div class="ilbl">تاريخ الإصدار</div><div class="ival">${new Date().toLocaleDateString("ar-EG")}</div></div>
-      </div>
-      <table>
-        <thead><tr>
-          <th style="width:36px">#</th><th>البيان / Description</th>
-          <th>Part No.</th><th>الوحدة</th><th>الكمية / Qty</th>
-        </tr></thead>
-        <tbody>${tableRows}</tbody>
-      </table>
-      ${rfq.notes ? `<div class="nbox"><div class="nlbl">ملاحظات / Notes</div><div class="ntxt">${rfq.notes}</div></div>` : ""}
-      ${senderName || senderPhone ? `<div class="srow">
-        ${senderName ? `<div><div class="slbl">مسؤول الطلب</div><div class="sval">${senderName}</div></div>` : ""}
-        ${senderPhone ? `<div><div class="slbl">📞 تليفون</div><div class="sval">${senderPhone}</div></div>` : ""}
-      </div>` : ""}
+      <table><thead><tr>
+        <th style="width:34px">#</th><th>البيان / Description</th><th>Part No.</th><th>الوحدة</th><th>الكمية / Qty</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+      ${rfq.notes?'<div class="nb"><div class="nl">ملاحظات / Notes</div><div class="nt">'+rfq.notes+'</div></div>':""}
+      ${senderName||senderPhone?'<div class="sr">'+(senderName?'<div><div class="sl">👤 مسؤول الطلب</div><div class="sv">'+senderName+'</div></div>':'')+
+      (senderPhone?'<div><div class="sl">📞 تليفون المسؤول</div><div class="sv">'+senderPhone+'</div></div>':'')+
+      '</div>':""}
     </div>
   </div>
   <button class="pbtn no-print" onclick="window.print()">🖨️ طباعة / حفظ PDF</button>
   <script>window.addEventListener('load',()=>setTimeout(()=>window.print(),700));<\/script>
   </body></html>`;
 
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
+    win.document.open(); win.document.write(html); win.document.close();
   }
 function buildWhatsAppMessage(rfqNo: string, requestDate: string, companyName: string, items: RfqItem[], token?: string) {
   const lines = items.map((item, idx) =>
