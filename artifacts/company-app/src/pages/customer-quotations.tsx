@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
     import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
     import { Input } from "@/components/ui/input";
     import { Label } from "@/components/ui/label";
-    import { Trash2, Plus, Pencil, DollarSign, X, Loader2, TrendingUp, Search, Sparkles, CheckCircle2 } from "lucide-react";
+    import { Trash2, Plus, Pencil, DollarSign, X, Loader2, TrendingUp, Search, Sparkles, CheckCircle2, Eye, Printer } from "lucide-react";
     import {
       useGetCustomerQuotations,
       useCreateCustomerQuotation,
@@ -176,6 +176,32 @@ import { useState, useMemo, useEffect, useRef } from "react";
       const [items, setItems]         = useState<LineItem[]>([emptyItem()]);
       const [errors, setErrors]       = useState<HeaderErrors>({});
       const [saving, setSaving]       = useState(false);
+
+      // ── View / Print modal state ──
+      const [viewQ, setViewQ]           = useState<any | null>(null);
+      const [viewItems, setViewItems]   = useState<any[]>([]);
+      const [viewLoading, setViewLoading] = useState(false);
+      const [companyInfo, setCompanyInfo] = useState<{ name: string; logoUrl: string; address: string; phone: string; email: string } | null>(null);
+
+      // Fetch company info once
+      useEffect(() => {
+        fetch(`${API_BASE}/api/settings/public`).then(r => r.json()).then(d => setCompanyInfo(d)).catch(() => {});
+      }, []);
+
+      async function handleView(q: any) {
+        setViewQ(q);
+        setViewLoading(true);
+        try {
+          const res = await fetch(`${API_BASE}/api/customer-quotations/${q.id}`, { credentials: "include" });
+          const data = await res.json();
+          setViewItems(data.items ?? []);
+        } catch { setViewItems([]); }
+        finally { setViewLoading(false); }
+      }
+
+      function handlePrint() {
+        window.print();
+      }
 
       // ── Pricing modal state ──
       const [pricingQ, setPricingQ]         = useState<{ id: number; quotationNo: string } | null>(null);
@@ -415,6 +441,14 @@ import { useState, useMemo, useEffect, useRef } from "react";
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleView(q)}
+                              className="flex items-center gap-1 text-xs text-slate-600 hover:text-slate-800 font-medium bg-slate-50 hover:bg-slate-100 px-2 py-1 rounded border border-slate-200 transition-colors"
+                              title="عرض وطباعة"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              عرض
+                            </button>
                             {(q.status === "تم الرد من المورد" || q.status === "مكتمل") && (
                               <button
                                 onClick={() => handlePricing({ id: q.id, quotationNo: q.quotationNo })}
@@ -554,6 +588,143 @@ import { useState, useMemo, useEffect, useRef } from "react";
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+
+            {/* ── View / Print Modal ── */}
+            {viewQ && (
+              <Dialog open={!!viewQ} onOpenChange={v => { if (!v) setViewQ(null); }}>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto print:max-w-none print:max-h-none print:overflow-visible print:shadow-none print:border-none" dir="rtl">
+                  <style>{`
+                    @media print {
+                      body > *:not(.print-area) { display: none !important; }
+                      [data-radix-dialog-overlay] { display: none !important; }
+                      [role="dialog"] { position: static !important; transform: none !important; box-shadow: none !important; border: none !important; max-width: 100% !important; width: 100% !important; }
+                      .no-print { display: none !important; }
+                    }
+                  `}</style>
+
+                  <DialogHeader className="no-print">
+                    <DialogTitle className="flex items-center gap-2">
+                      <Eye className="h-5 w-5 text-slate-600" />
+                      عرض طلب التسعير — {viewQ.quotationNo}
+                    </DialogTitle>
+                  </DialogHeader>
+
+                  {viewLoading ? (
+                    <div className="flex items-center justify-center py-16">
+                      <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                    </div>
+                  ) : (
+                    <div className="space-y-6 py-2">
+                      {/* ── Company header ── */}
+                      <div className="flex items-center justify-between border-b pb-4">
+                        <div className="flex items-center gap-3">
+                          {companyInfo?.logoUrl && (
+                            <img src={companyInfo.logoUrl} alt="logo" className="h-16 w-auto object-contain" />
+                          )}
+                          <div>
+                            <p className="text-lg font-bold text-slate-800">{companyInfo?.name || ""}</p>
+                            {companyInfo?.address && <p className="text-xs text-slate-500">{companyInfo.address}</p>}
+                            {companyInfo?.phone  && <p className="text-xs text-slate-500">📞 {companyInfo.phone}</p>}
+                            {companyInfo?.email  && <p className="text-xs text-slate-500">✉ {companyInfo.email}</p>}
+                          </div>
+                        </div>
+                        <div className="text-left">
+                          <p className="text-xl font-bold text-[#1e3a5f]">طلب تسعير</p>
+                          <p className="text-sm font-mono text-slate-600 mt-1">{viewQ.quotationNo}</p>
+                        </div>
+                      </div>
+
+                      {/* ── Quotation meta ── */}
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div className="space-y-2">
+                          <div className="flex gap-2">
+                            <span className="font-medium text-slate-500 w-32 shrink-0">العميل:</span>
+                            <span className="text-slate-800 font-semibold">{viewQ.customerName || "—"}</span>
+                          </div>
+                          {viewQ.customerOrderNo && (
+                            <div className="flex gap-2">
+                              <span className="font-medium text-slate-500 w-32 shrink-0">رقم أمر العميل:</span>
+                              <span className="text-slate-700">{viewQ.customerOrderNo}</span>
+                            </div>
+                          )}
+                          {viewQ.responsibleName && (
+                            <div className="flex gap-2">
+                              <span className="font-medium text-slate-500 w-32 shrink-0">المسؤول:</span>
+                              <span className="text-slate-700">{viewQ.responsibleName}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex gap-2">
+                            <span className="font-medium text-slate-500 w-32 shrink-0">تاريخ الطلب:</span>
+                            <span className="text-slate-700">{viewQ.requestDate}</span>
+                          </div>
+                          {viewQ.expiryDate && (
+                            <div className="flex gap-2">
+                              <span className="font-medium text-slate-500 w-32 shrink-0">تاريخ الانتهاء:</span>
+                              <span className="text-slate-700">{viewQ.expiryDate}</span>
+                            </div>
+                          )}
+                          <div className="flex gap-2">
+                            <span className="font-medium text-slate-500 w-32 shrink-0">الحالة:</span>
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusBadge(viewQ.status)}`}>{viewQ.status}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* ── Items table ── */}
+                      <div>
+                        <p className="text-sm font-semibold text-slate-700 mb-2">بنود الطلب</p>
+                        <div className="border rounded-lg overflow-hidden">
+                          <table className="w-full text-sm text-right">
+                            <thead className="bg-[#1e3a5f] text-white">
+                              <tr>
+                                <th className="px-3 py-2 font-medium text-xs text-center w-8">#</th>
+                                <th className="px-3 py-2 font-medium text-xs">كود البند</th>
+                                <th className="px-3 py-2 font-medium text-xs">التوصيف</th>
+                                <th className="px-3 py-2 font-medium text-xs" dir="ltr">PART NO</th>
+                                <th className="px-3 py-2 font-medium text-xs">الوحدة</th>
+                                <th className="px-3 py-2 font-medium text-xs text-center">الكمية</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {viewItems.map((it: any, idx: number) => (
+                                <tr key={it.id} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50"}>
+                                  <td className="px-3 py-2 text-xs text-slate-400 text-center">{idx + 1}</td>
+                                  <td className="px-3 py-2 text-xs text-slate-600">{it.customerItemCode || "—"}</td>
+                                  <td className="px-3 py-2 text-xs text-slate-800 font-medium">{it.description}</td>
+                                  <td className="px-3 py-2 text-xs text-slate-500" dir="ltr">{it.partNo || "—"}</td>
+                                  <td className="px-3 py-2 text-xs text-slate-500">{it.unit || "—"}</td>
+                                  <td className="px-3 py-2 text-xs text-slate-700 text-center font-medium" dir="ltr">{fmtQty(it.quantity)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-2 text-left">إجمالي البنود: {viewItems.length}</p>
+                      </div>
+
+                      {/* ── Footer note ── */}
+                      <div className="border-t pt-3 text-xs text-slate-400 text-center">
+                        هذا المستند صادر إلكترونياً — {new Date().toLocaleDateString("ar-EG")}
+                      </div>
+                    </div>
+                  )}
+
+                  <DialogFooter className="gap-2 no-print">
+                    <Button variant="outline" onClick={() => setViewQ(null)}>إغلاق</Button>
+                    <Button
+                      className="bg-[#1e3a5f] hover:bg-[#162d4a] flex items-center gap-2"
+                      onClick={handlePrint}
+                      disabled={viewLoading}
+                    >
+                      <Printer className="h-4 w-4" />
+                      طباعة
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
 
             {/* ── Pricing Modal ── */}
             {pricingQ && (
