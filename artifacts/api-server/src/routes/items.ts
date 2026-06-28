@@ -109,7 +109,7 @@ import { Router } from "express";
             ) AS internal_code,
             cq.quotation_no,
             cq.request_date,
-            cq.close_date    AS quotation_close_date,
+            cq.expiry_date   AS quotation_close_date,
             cq.status        AS quotation_status,
             cq.id            AS quotation_id,
             cu.name          AS customer_name
