@@ -35,6 +35,7 @@ interface DetailRow {
   quotation_id: number;
   quotation_no: string;
   request_date: string;
+  quotation_expiry_date: string | null;
   quotation_status: string;
   customer_order_no: string;
   customer_name: string;
@@ -168,6 +169,7 @@ function DetailModal({ description, internalCode, onClose }: { description: stri
                     <th className="px-3 py-2.5 font-semibold border-l border-slate-300">طلب التسعير</th>
                     <th className="px-3 py-2.5 font-semibold border-l border-slate-300">العميل</th>
                     <th className="px-3 py-2.5 font-semibold border-l border-slate-300">تاريخ الطلب</th>
+                    <th className="px-3 py-2.5 font-semibold border-l border-slate-300">تاريخ إغلاق التسعير</th>
                     <th className="px-3 py-2.5 font-semibold border-l border-slate-300">حالة الطلب</th>
                     <th className="px-3 py-2.5 font-semibold border-l border-slate-300">كود العميل للبند</th>
                     <th className="px-3 py-2.5 font-semibold border-l border-slate-300">رقم أمر العميل</th>
@@ -190,6 +192,7 @@ function DetailModal({ description, internalCode, onClose }: { description: stri
                         <td className="px-3 py-2 border-l border-slate-200 font-mono text-[#1e3a5f] font-semibold">{row.quotation_no}</td>
                         <td className="px-3 py-2 border-l border-slate-200 text-slate-700 max-w-[120px] truncate">{row.customer_name || "—"}</td>
                         <td className="px-3 py-2 border-l border-slate-200 text-slate-500 whitespace-nowrap">{row.request_date || "—"}</td>
+                        <td className="px-3 py-2 border-l border-slate-200 text-slate-500 whitespace-nowrap">{row.quotation_expiry_date || "—"}</td>
                         <td className="px-3 py-2 border-l border-slate-200"><Badge status={row.quotation_status} /></td>
                         <td className="px-3 py-2 border-l border-slate-200 font-mono text-slate-600 text-center">{row.customer_item_code || "—"}</td>
                         <td className="px-3 py-2 border-l border-slate-200 font-mono text-slate-600">{row.customer_order_no || "—"}</td>
