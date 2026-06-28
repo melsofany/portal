@@ -333,7 +333,7 @@ router.post("/", async (req, res) => {
         ADD COLUMN IF NOT EXISTS internal_code_score NUMERIC(6,2) NOT NULL DEFAULT 0
     `).catch(() => {});
 
-    const quotationNo = generateQuotationNo();
+    const quotationNo = await generateQuotationNo();
 
     const [quotation] = await db
       .insert(customerQuotationsTable)
