@@ -9,6 +9,7 @@ import { pgTable, text, serial, integer, timestamp, numeric } from "drizzle-orm/
     customerId: integer("customer_id").references(() => customersTable.id, { onDelete: "set null" }),
     customerName: text("customer_name").default(""),
     orderDate: text("order_date").notNull(),
+    closeDate: text("close_date").default(""),
     notes: text("notes").default(""),
     status: text("status").notNull().default("مفتوح"),
     totalAmount: numeric("total_amount", { precision: 14, scale: 3 }).default("0"),
