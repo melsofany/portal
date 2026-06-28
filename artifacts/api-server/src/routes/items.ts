@@ -9,6 +9,11 @@ import { Router } from "express";
       ALTER TABLE canonical_items ADD COLUMN IF NOT EXISTS part_no TEXT NOT NULL DEFAULT ''
     `).catch(() => {});
 
+    // ── Ensure customer_quotations has close_date column ──────────────────────
+    pool.query(`
+      ALTER TABLE customer_quotations ADD COLUMN IF NOT EXISTS close_date TEXT NOT NULL DEFAULT ''
+    `).catch(() => {});
+
     // ── Core helper: match or auto-create a canonical item ────────────────────
     // Matching priority:
     //   1. Exact Part No match  (if part_no provided)  → strongest signal
