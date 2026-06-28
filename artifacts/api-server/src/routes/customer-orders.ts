@@ -161,7 +161,7 @@ import { Router } from "express";
   router.put("/:id", async (req, res) => {
     try {
       const id = Number(req.params.id);
-      const { customerPoNo, orderDate, notes, status, items } = req.body;
+      const { customerPoNo, orderDate, closeDate, notes, status, items } = req.body;
 
       if (!customerPoNo?.trim()) return res.status(400).json({ error: "رقم أمر الشراء مطلوب" });
       if (!orderDate) return res.status(400).json({ error: "التاريخ مطلوب" });
@@ -192,6 +192,7 @@ import { Router } from "express";
           customerId,
           customerName,
           orderDate: orderDate.trim(),
+          closeDate: closeDate?.trim() ?? "",
           notes: notes?.trim() ?? "",
           status: status ?? "مفتوح",
           totalAmount: String(totalAmount),
