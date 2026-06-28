@@ -604,6 +604,11 @@ import { pool } from "@workspace/db";
             END $$;
           `);
 
+          // Add close_date to customer_orders
+          await client.query(`
+            ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS close_date TEXT DEFAULT '';
+          `).catch(() => {});
+
           console.log("[migrate] Schema ready");
     } finally {
       client.release();
