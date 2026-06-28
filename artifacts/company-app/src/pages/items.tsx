@@ -168,10 +168,12 @@ function DetailModal({ description, internalCode, onClose }: { description: stri
                     <th className="px-3 py-2.5 font-semibold border-l border-slate-300">العميل</th>
                     <th className="px-3 py-2.5 font-semibold border-l border-slate-300">تاريخ الطلب</th>
                     <th className="px-3 py-2.5 font-semibold border-l border-slate-300">حالة الطلب</th>
+                    <th className="px-3 py-2.5 font-semibold border-l border-slate-300">كود العميل للبند</th>
                     <th className="px-3 py-2.5 font-semibold border-l border-slate-300">رقم أمر العميل</th>
                     <th className="px-3 py-2.5 font-semibold border-l border-slate-300">الكمية</th>
                     <th className="px-3 py-2.5 font-semibold border-l border-slate-300 bg-[#1e3a5f]/10">أمر البيع</th>
                     <th className="px-3 py-2.5 font-semibold border-l border-slate-300 bg-[#1e3a5f]/10">تاريخ البيع</th>
+                    <th className="px-3 py-2.5 font-semibold border-l border-slate-300 bg-[#1e3a5f]/10">تاريخ الإغلاق</th>
                     <th className="px-3 py-2.5 font-semibold border-l border-slate-300 bg-[#1e3a5f]/10">كمية البيع</th>
                     <th className="px-3 py-2.5 font-semibold border-l border-slate-300 bg-[#1e3a5f]/10">سعر البيع</th>
                     <th className="px-3 py-2.5 font-semibold border-l border-slate-300 bg-[#1e3a5f]/10">الإجمالي</th>
@@ -188,19 +190,21 @@ function DetailModal({ description, internalCode, onClose }: { description: stri
                         <td className="px-3 py-2 border-l border-slate-200 text-slate-700 max-w-[120px] truncate">{row.customer_name || "—"}</td>
                         <td className="px-3 py-2 border-l border-slate-200 text-slate-500 whitespace-nowrap">{row.request_date || "—"}</td>
                         <td className="px-3 py-2 border-l border-slate-200"><Badge status={row.quotation_status} /></td>
+                        <td className="px-3 py-2 border-l border-slate-200 font-mono text-slate-600 text-center">{row.customer_item_code || "—"}</td>
                         <td className="px-3 py-2 border-l border-slate-200 font-mono text-slate-600">{row.customer_order_no || "—"}</td>
                         <td className="px-3 py-2 border-l border-slate-200 font-semibold text-center">{num(row.quoted_qty, 0)}</td>
                         {hasSale ? (
                           <>
                             <td className="px-3 py-2 border-l border-slate-200 bg-[#1e3a5f]/5 font-mono text-[#1e3a5f] font-bold">{row.customer_po_no || row.sales_order_no || "—"}</td>
                             <td className="px-3 py-2 border-l border-slate-200 bg-[#1e3a5f]/5 text-slate-500 whitespace-nowrap">{row.sales_order_date || "—"}</td>
+                            <td className="px-3 py-2 border-l border-slate-200 bg-[#1e3a5f]/5 text-slate-500 whitespace-nowrap">{row.order_close_date || "—"}</td>
                             <td className="px-3 py-2 border-l border-slate-200 bg-[#1e3a5f]/5 font-semibold text-center">{num(row.ordered_qty, 0)}</td>
                             <td className="px-3 py-2 border-l border-slate-200 bg-[#1e3a5f]/5">{num(row.selling_unit_price)}</td>
                             <td className="px-3 py-2 border-l border-slate-200 bg-[#1e3a5f]/5 font-bold text-[#1e3a5f]">{num(row.selling_total_price)}</td>
                             <td className="px-3 py-2 bg-[#1e3a5f]/5"><Badge status={row.order_status ?? ""} /></td>
                           </>
                         ) : (
-                          <td colSpan={6} className="px-3 py-2 bg-slate-100/50 text-slate-300 text-center text-[10px] tracking-wider">لم يصدر أمر بيع</td>
+                          <td colSpan={8} className="px-3 py-2 bg-slate-100/50 text-slate-300 text-center text-[10px] tracking-wider">لم يصدر أمر بيع</td>
                         )}
                       </tr>
                     );
