@@ -578,7 +578,32 @@ import { pool } from "@workspace/db";
           await client.query(`
             ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS gemini_api_key TEXT DEFAULT '';
           `);
-  
+
+          // Fix corrupted quotation_no values (stored as '{}' or '[object Object]' before await fix)
+          await client.query(`
+            DO $$
+            DECLARE
+              r RECORD;
+              new_no TEXT;
+              seq_num INTEGER;
+              date_str TEXT;
+            BEGIN
+              FOR r IN
+                SELECT id, created_at FROM customer_quotations
+                WHERE quotation_no NOT LIKE 'CQ-%'
+                ORDER BY created_at
+              LOOP
+                date_str := TO_CHAR(r.created_at AT TIME ZONE 'UTC', 'YYYYMMDD');
+                SELECT COALESCE(MAX(CAST(SPLIT_PART(quotation_no, '-', 3) AS INTEGER)), 0) + 1
+                INTO seq_num
+                FROM customer_quotations
+                WHERE quotation_no LIKE 'CQ-' || date_str || '-%';
+                new_no := 'CQ-' || date_str || '-' || LPAD(seq_num::TEXT, 4, '0');
+                UPDATE customer_quotations SET quotation_no = new_no WHERE id = r.id;
+              END LOOP;
+            END $$;
+          `);
+
           console.log("[migrate] Schema ready");
     } finally {
       client.release();
