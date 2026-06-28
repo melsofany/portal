@@ -100,17 +100,20 @@ function Badge({ status }: { status: string }) {
   );
 }
 
-function DetailModal({ description, onClose }: { description: string; onClose: () => void }) {
+function DetailModal({ description, internalCode, onClose }: { description: string; internalCode?: string; onClose: () => void }) {
   const [data, setData] = useState<DetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/items/detail?description=${encodeURIComponent(description)}`, { credentials: "include" })
+    const url = internalCode
+      ? `${API_BASE}/api/items/detail-by-code?code=${encodeURIComponent(internalCode)}`
+      : `${API_BASE}/api/items/detail?description=${encodeURIComponent(description)}`;
+    fetch(url, { credentials: "include" })
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false); })
       .catch(() => { setError("فشل في جلب التفاصيل"); setLoading(false); });
-  }, [description]);
+  }, [description, internalCode]);
 
   const s = data?.stats;
 
@@ -124,9 +127,14 @@ function DetailModal({ description, onClose }: { description: string; onClose: (
             <ChevronLeft className="h-3.5 w-3.5 text-white/40 shrink-0" />
             <span className="text-xs text-white/60 shrink-0">البنود</span>
             <ChevronLeft className="h-3.5 w-3.5 text-white/40 shrink-0" />
-            <span className="text-sm font-semibold truncate">{description}</span>
+            {internalCode && (
+              <span className="font-mono text-xs bg-white/20 border border-white/30 rounded px-2 py-0.5 shrink-0">{internalCode}</span>
+            )}
+            <span className="text-sm font-semibold truncate">{data?.description || description}</span>
           </div>
-          <span className="text-xs text-white/50 shrink-0">سجل البند</span>
+          <span className="text-xs text-white/50 shrink-0">
+            {internalCode ? `سجل الكود الإداري` : "سجل البند"}
+          </span>
         </div>
         {loading ? (
           <div className="flex-1 flex items-center justify-center text-slate-400 text-sm animate-pulse">جاري التحميل...</div>
@@ -216,6 +224,7 @@ export default function ItemsPage() {
   const [loading,      setLoading]      = useState(true);
   const [search,       setSearch]       = useState("");
   const [selectedDesc, setSelectedDesc] = useState<string | null>(null);
+  const [selectedCode, setSelectedCode] = useState<string | null>(null);
 
   const fetchItems = () => {
     fetch(`${API_BASE}/api/items`, { credentials: "include" })
@@ -310,9 +319,9 @@ export default function ItemsPage() {
                       </td>
                       <td className="px-3 py-2 border-l border-slate-100">
                         <button
-                          onClick={() => setSelectedDesc(item.description)}
+                          onClick={() => { setSelectedDesc(item.description); setSelectedCode(item.internal_code || null); }}
                           className="text-right text-[#1e3a5f] font-semibold hover:underline underline-offset-2 break-words text-start"
-                          title="اضغط لعرض السجل الكامل">
+                          title="اضغط لعرض السجل الكامل عبر الكود الإداري">
                           {item.description || "—"}
                         </button>
                       </td>
@@ -340,7 +349,11 @@ export default function ItemsPage() {
       </div>
 
       {selectedDesc && (
-        <DetailModal description={selectedDesc} onClose={() => setSelectedDesc(null)} />
+        <DetailModal
+          description={selectedDesc}
+          internalCode={selectedCode ?? undefined}
+          onClose={() => { setSelectedDesc(null); setSelectedCode(null); }}
+        />
       )}
     </AppLayout>
   );
