@@ -67,6 +67,7 @@ import React, { useState, useMemo, useEffect } from "react";
     const [loadingEdit, setLoadingEdit] = useState(false);
     const [customerPoNo, setCustomerPoNo] = useState("");
     const [orderDate, setOrderDate] = useState(new Date().toISOString().split("T")[0]);
+    const [closeDate, setCloseDate] = useState("");
     const [notes, setNotes] = useState("");
     const [orderStatus, setOrderStatus] = useState("مفتود");
 
@@ -110,6 +111,7 @@ import React, { useState, useMemo, useEffect } from "react";
       setEditId(null);
       setCustomerPoNo("");
       setOrderDate(new Date().toISOString().split("T")[0]);
+      setCloseDate("");
       setNotes("");
       setOrderStatus("مفتوح");
       setSearchTerm(""); setFoundCQ(null); setSelectedItems({});
@@ -131,6 +133,7 @@ import React, { useState, useMemo, useEffect } from "react";
         const data = await res.json();
         setCustomerPoNo(data.customerPoNo ?? "");
         setOrderDate(data.orderDate ?? new Date().toISOString().split("T")[0]);
+        setCloseDate(data.closeDate ?? "");
         setNotes(data.notes ?? "");
         setOrderStatus(data.status ?? "مفتوح");
         const loadedItems: OrderItem[] = (data.items ?? []).map((it: any, idx: number) => ({
@@ -229,7 +232,7 @@ import React, { useState, useMemo, useEffect } from "react";
 
       setSaving(true); setSaveError("");
       const payload = {
-        customerPoNo, orderDate, notes, status: orderStatus,
+        customerPoNo, orderDate, closeDate, notes, status: orderStatus,
         items: orderItems.map((it, idx) => ({
           quotationId: it.quotationId, quotationNo: it.quotationNo,
           quotationItemId: it.quotationItemId, description: it.description,
@@ -419,6 +422,14 @@ import React, { useState, useMemo, useEffect } from "react";
                         </select>
                       </div>
                     )}
+                    <div className="space-y-1.5">
+                      <Label>تاريخ الإغلاق (اختياري)</Label>
+                      <Input
+                        type="date"
+                        value={closeDate}
+                        onChange={e => setCloseDate(e.target.value)}
+                      />
+                    </div>
                     <div className="space-y-1.5">
                       <Label>ملاحظات (اختياري)</Label>
                       <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="أي ملاحظات إضافية..." />
