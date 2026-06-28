@@ -17,6 +17,7 @@ interface Item {
   quantity: string;
   quotation_no: string;
   request_date: string;
+  quotation_close_date?: string;
   quotation_status: string;
   quotation_id: number;
   customer_name: string;
@@ -304,7 +305,8 @@ export default function ItemsPage() {
                     <th className="px-3 py-2.5 font-semibold border-l border-slate-200">الكمية</th>
                     <th className="px-3 py-2.5 font-semibold border-l border-slate-200">طلب التسعير</th>
                     <th className="px-3 py-2.5 font-semibold border-l border-slate-200">العميل</th>
-                    <th className="px-3 py-2.5 font-semibold border-l border-slate-200">التاريخ</th>
+                    <th className="px-3 py-2.5 font-semibold border-l border-slate-200">تاريخ الطلب</th>
+                    <th className="px-3 py-2.5 font-semibold border-l border-slate-200">تاريخ الإغلاق</th>
                     <th className="px-3 py-2.5 font-semibold">الحالة</th>
                   </tr>
                 </thead>
@@ -338,6 +340,9 @@ export default function ItemsPage() {
                       <td className="px-3 py-2 border-l border-slate-100 font-mono text-[#1e3a5f]">{item.quotation_no}</td>
                       <td className="px-3 py-2 border-l border-slate-100 text-slate-700">{item.customer_name || "—"}</td>
                       <td className="px-3 py-2 border-l border-slate-100 text-slate-400 whitespace-nowrap">{item.request_date || "—"}</td>
+                      <td className="px-3 py-2 border-l border-slate-100 text-slate-400 whitespace-nowrap">
+                        {item.quotation_close_date || "—"}
+                      </td>
                       <td className="px-3 py-2">
                         <span className={`inline-block border px-1.5 py-0.5 text-[10px] font-semibold rounded-sm ${QT_COLOR[item.quotation_status] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>
                           {item.quotation_status}

@@ -44,6 +44,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
       responsibleName: "",
       requestDate: "",
       expiryDate: "",
+      closeDate: "",
       customerOrderNo: "",
     };
 
@@ -246,6 +247,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
             responsibleName: data.responsibleName ?? "",
             requestDate: data.requestDate ?? "",
             expiryDate: data.expiryDate ?? "",
+            closeDate: data.closeDate ?? "",
             customerOrderNo: data.customerOrderNo ?? "",
           });
           setItems((data.items ?? []).map((it: any) => ({
@@ -285,6 +287,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
           responsibleName: header.responsibleName,
           requestDate: header.requestDate,
           expiryDate: header.expiryDate,
+          closeDate: header.closeDate,
           customerOrderNo: header.customerOrderNo,
           items: validItems.map(it => ({
             customerItemCode: it.customerItemCode,
@@ -422,6 +425,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
                     <th className="px-6 py-3 font-medium text-slate-500">رقم طلب العميل</th>
                     <th className="px-6 py-3 font-medium text-slate-500">تاريخ الطلب</th>
                     <th className="px-6 py-3 font-medium text-slate-500">تاريخ الانتهاء</th>
+                    <th className="px-6 py-3 font-medium text-slate-500">تاريخ إغلاق التسعير</th>
                     <th className="px-6 py-3 font-medium text-slate-500">الحالة</th>
                     <th className="px-6 py-3 font-medium text-slate-500">الإجراءات</th>
                   </tr>
@@ -447,6 +451,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
                         <td className="px-6 py-4 text-slate-600">{q.customerOrderNo || "—"}</td>
                         <td className="px-6 py-4 text-slate-600">{q.requestDate}</td>
                         <td className="px-6 py-4 text-slate-600">{q.expiryDate || "—"}</td>
+                        <td className="px-6 py-4 text-slate-600">{q.closeDate || "—"}</td>
                         <td className="px-6 py-4">
                           <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadge(q.status)}`}>
                             {q.status}
@@ -544,6 +549,11 @@ import { useState, useMemo, useEffect, useRef } from "react";
                     <div className="space-y-1.5">
                       <Label>تاريخ الانتهاء</Label>
                       <Input type="date" value={header.expiryDate} onChange={e => handleHeaderChange("expiryDate", e.target.value)} />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label>تاريخ إغلاق طلب التسعير</Label>
+                      <Input type="date" value={header.closeDate} onChange={e => handleHeaderChange("closeDate", e.target.value)} />
                     </div>
                   </div>
 

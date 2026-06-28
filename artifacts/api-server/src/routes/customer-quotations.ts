@@ -299,7 +299,7 @@ router.get("/:id/best-supplier-prices", async (req, res) => {
 // POST /api/customer-quotations
 router.post("/", async (req, res) => {
   try {
-    const { customerId, responsibleName, requestDate, expiryDate, customerOrderNo, items } = req.body;
+    const { customerId, responsibleName, requestDate, expiryDate, closeDate, customerOrderNo, items } = req.body;
 
     if (!customerId) return res.status(400).json({ error: "يجب اختيار العميل" });
     if (!requestDate) return res.status(400).json({ error: "تاريخ الطلب مطلوب" });
@@ -332,6 +332,10 @@ router.post("/", async (req, res) => {
         ADD COLUMN IF NOT EXISTS internal_code TEXT NOT NULL DEFAULT '',
         ADD COLUMN IF NOT EXISTS internal_code_score NUMERIC(6,2) NOT NULL DEFAULT 0
     `).catch(() => {});
+    await pool.query(`
+      ALTER TABLE customer_quotations
+        ADD COLUMN IF NOT EXISTS close_date TEXT NOT NULL DEFAULT ''
+    `).catch(() => {});
 
     const quotationNo = await generateQuotationNo();
 
@@ -343,6 +347,7 @@ router.post("/", async (req, res) => {
         responsibleName: responsibleName?.trim() ?? "",
         requestDate: requestDate.trim(),
         expiryDate: expiryDate?.trim() ?? "",
+        closeDate: closeDate?.trim() ?? "",
         customerOrderNo: customerOrderNo?.trim() ?? "",
         status: "مفتوح",
       })
@@ -386,7 +391,7 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const { customerId, responsibleName, requestDate, expiryDate, customerOrderNo, status, items } = req.body;
+    const { customerId, responsibleName, requestDate, expiryDate, closeDate, customerOrderNo, status, items } = req.body;
 
     if (!customerId) return res.status(400).json({ error: "يجب اختيار العميل" });
     if (!requestDate) return res.status(400).json({ error: "تاريخ الطلب مطلوب" });
@@ -433,6 +438,7 @@ router.put("/:id", async (req, res) => {
         responsibleName: responsibleName?.trim() ?? "",
         requestDate: requestDate.trim(),
         expiryDate: expiryDate?.trim() ?? "",
+        closeDate: closeDate?.trim() ?? "",
         customerOrderNo: customerOrderNo?.trim() ?? "",
         ...(status ? { status } : {}),
       })

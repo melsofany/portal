@@ -8,6 +8,7 @@ export const customerQuotationsTable = pgTable("customer_quotations", {
   responsibleName: text("responsible_name").default(""),
   requestDate: text("request_date").notNull(),
   expiryDate: text("expiry_date").default(""),
+  closeDate: text("close_date").default(""),
   customerOrderNo: text("customer_order_no").default(""),
   status: text("status").notNull().default("مفتوح"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
