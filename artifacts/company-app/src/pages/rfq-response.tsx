@@ -533,51 +533,6 @@ export default function RfqResponsePage() {
               </div>
             </div>
 
-            {/* ── Response details card ── */}
-            {!isFormDisabled && (
-              <div className="rounded-xl bg-white border border-slate-200 shadow-sm p-5 space-y-4">
-                <h3 className="text-sm font-bold text-slate-700 border-b pb-2">تفاصيل العرض العامة</h3>
-
-                {/* Global VAT */}
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-slate-600">ضريبة القيمة المضافة الإجمالية (VAT)</label>
-                  <div className="flex gap-3">
-                    <label className={`flex items-center gap-2 cursor-pointer px-4 py-2.5 rounded-lg border text-sm transition-colors ${vatIncluded === "yes" ? "border-[#0064d9] bg-blue-50 text-[#0064d9] font-semibold" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}>
-                      <input type="radio" name="vat" value="yes" checked={vatIncluded === "yes"} onChange={() => setVatIncluded("yes")} className="hidden" />
-                      شامل الضريبة (14%)
-                    </label>
-                    <label className={`flex items-center gap-2 cursor-pointer px-4 py-2.5 rounded-lg border text-sm transition-colors ${vatIncluded === "no" ? "border-[#0064d9] bg-blue-50 text-[#0064d9] font-semibold" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}>
-                      <input type="radio" name="vat" value="no" checked={vatIncluded === "no"} onChange={() => setVatIncluded("no")} className="hidden" />
-                      غير شامل الضريبة
-                    </label>
-                  </div>
-                </div>
-
-                {/* Global Delivery days */}
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-slate-600">مدة التوريد الإجمالية (بالأيام)</label>
-                  <input
-                    type="number" min="1" placeholder="مثال: 14"
-                    value={deliveryDays}
-                    onChange={e => setDeliveryDays(e.target.value)}
-                    className="w-full sm:w-48 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-[#0064d9]/20"
-                    dir="ltr"
-                  />
-                </div>
-
-                {/* Notes / terms */}
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-slate-600">ملاحظات إضافية <span className="text-slate-400 font-normal">(اختياري)</span></label>
-                  <textarea
-                    rows={3}
-                    placeholder="أي شروط أو ملاحظات أخرى..."
-                    value={responseNotes}
-                    onChange={e => setResponseNotes(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-[#0064d9]/20 resize-none"
-                  />
-                </div>
-              </div>
-            )}
 
             {/* Payment terms + Offer validity — always visible */}
             <div className="rounded-xl bg-white border border-slate-200 shadow-sm p-5 space-y-4">
