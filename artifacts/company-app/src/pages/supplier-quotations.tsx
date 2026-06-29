@@ -2,6 +2,13 @@ import React, { useState } from "react";
 import AppLayout from "@/components/AppLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
 function getAuthToken(): string | null {
@@ -428,19 +435,19 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
   const totalItems = data?.items.length ?? 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 overflow-auto" dir="rtl">
-      <div className="relative w-full max-w-5xl my-6 bg-white shadow-2xl overflow-hidden border border-slate-200" style={{ borderRadius: 6 }}>
+    <Dialog open={true} onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="p-0 max-w-5xl max-h-[92vh] flex flex-col gap-0 [&>button]:hidden overflow-hidden rounded" dir="rtl">
 
-        {/* Header */}
-        <div className="flex items-center justify-between bg-[#0f2240] px-5 py-3.5">
+        {/* SAP-style Header */}
+        <DialogHeader className="flex-row items-center justify-between bg-[#0f2240] px-5 py-3.5 rounded-t space-y-0">
           <div>
-            <h2 className="text-sm font-bold text-white">تحليل ومقارنة الأسعار</h2>
+            <DialogTitle className="text-sm font-bold text-white">تحليل ومقارنة الأسعار</DialogTitle>
             <p className="text-blue-300 text-[11px] mt-0.5 font-mono">{rfqNo}</p>
           </div>
           <button onClick={onClose} className="text-slate-300 hover:text-white p-1 rounded transition-colors">
             <X className="h-4 w-4" />
           </button>
-        </div>
+        </DialogHeader>
 
         <div className="p-5 space-y-5 overflow-auto max-h-[82vh]">
           {isLoading && <div className="flex items-center justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-[#0064d9]" /></div>}
@@ -749,8 +756,8 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
           </div>
           <button onClick={onClose} className="px-4 py-1.5 border border-slate-300 bg-white text-xs text-slate-700 hover:bg-slate-50 rounded transition-colors">إغلاق</button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -878,19 +885,19 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   const labelCls = "block text-[11px] font-semibold text-slate-600 mb-1";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3" dir="rtl">
-      <div className="relative w-full max-w-3xl max-h-[93vh] flex flex-col bg-white shadow-2xl overflow-hidden border border-slate-300" style={{ borderRadius: 4 }}>
+    <Dialog open={true} onOpenChange={v => { if (!v && step !== 4) onClose(); }}>
+      <DialogContent className="p-0 max-w-3xl max-h-[93vh] flex flex-col gap-0 [&>button]:hidden overflow-hidden rounded" dir="rtl">
 
         {/* SAP Modal Header */}
-        <div className="flex items-center justify-between bg-[#0f2240] px-5 py-3">
+        <DialogHeader className="flex-row items-center justify-between bg-[#0f2240] px-5 py-3 rounded-t space-y-0">
           <div className="flex items-center gap-2">
             <Send className="h-4 w-4 text-blue-300" />
-            <span className="text-sm font-bold text-white">إرسال طلب تسعير للموردين</span>
+            <DialogTitle className="text-sm font-bold text-white">إرسال طلب تسعير للموردين</DialogTitle>
           </div>
           <button onClick={onClose} className="text-slate-300 hover:text-white p-1 rounded transition-colors">
             <X className="h-4 w-4" />
           </button>
-        </div>
+        </DialogHeader>
 
         {/* Step progress bar — SAP style */}
         {step <= 4 && (
@@ -1375,8 +1382,8 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
             )}
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1450,22 +1457,22 @@ function AddSupplierModal({ rfq, apiBase, onClose, onAdded }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" dir="rtl">
-      <div className="bg-white shadow-2xl w-full max-w-lg flex flex-col max-h-[88vh] border border-slate-300" style={{ borderRadius: 4 }}>
+    <Dialog open={true} onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="p-0 max-w-lg max-h-[88vh] flex flex-col gap-0 [&>button]:hidden overflow-hidden rounded" dir="rtl">
 
-        {/* Header */}
-        <div className="flex items-center justify-between bg-[#0f2240] px-5 py-3">
+        {/* SAP-style Header */}
+        <DialogHeader className="flex-row items-center justify-between bg-[#0f2240] px-5 py-3 rounded-t space-y-0">
           <div className="flex items-center gap-2">
             <UserPlus className="h-4 w-4 text-blue-300" />
             <div>
-              <h3 className="font-bold text-white text-sm">إضافة موردين للطلب</h3>
+              <DialogTitle className="font-bold text-white text-sm">إضافة موردين للطلب</DialogTitle>
               <p className="text-blue-300 text-[10px] font-mono">{rfq.rfqNo}</p>
             </div>
           </div>
           <button onClick={onClose} className="text-slate-300 hover:text-white p-1 rounded transition-colors">
             <X className="h-4 w-4" />
           </button>
-        </div>
+        </DialogHeader>
 
         {/* Search */}
         <div className="px-4 pt-3 pb-0">
@@ -1553,8 +1560,8 @@ function AddSupplierModal({ rfq, apiBase, onClose, onAdded }: {
             {adding ? 'جاري الإضافة...' : selectedIds.size > 0 ? `إضافة ${selectedIds.size} مورد` : 'إضافة'}
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
