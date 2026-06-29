@@ -512,35 +512,53 @@ ${termsSection}
 
 قدّم الإجابة بعناوين واضحة. كن دقيقاً وموضوعياً. ركّز على كشف الشذوذ بشكل خاص.`;
 
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
-        }),
-        signal: AbortSignal.timeout(30000),
-      }
-    );
+    // Try models in order: 2.0-flash first, then 1.5-flash as fallback
+    const models = ["gemini-2.0-flash", "gemini-1.5-flash"];
+    let geminiData: any = null;
+    let lastError = "";
 
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text();
-      req.log.error({ status: geminiRes.status, body: errText }, "Gemini API error");
-      return res.status(502).json({ error: "فشل الاتصال بـ Gemini API. تحقق من صحة المفتاح." });
+    for (const model of models) {
+      const geminiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
+          }),
+          signal: AbortSignal.timeout(30000),
+        }
+      );
+
+      if (geminiRes.ok) {
+        geminiData = await geminiRes.json();
+        break;
+      }
+
+      const errBody = await geminiRes.text();
+      req.log.error({ model, status: geminiRes.status, body: errBody }, "Gemini API error");
+      try {
+        const parsed = JSON.parse(errBody);
+        lastError = parsed?.error?.message ?? errBody;
+      } catch {
+        lastError = errBody.slice(0, 300);
+      }
     }
 
-    const geminiData = await geminiRes.json() as any;
+    if (!geminiData) {
+      return res.status(502).json({ error: `خطأ من Gemini API: ${lastError}` });
+    }
+
     const analysis = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
     if (!analysis) {
       return res.status(502).json({ error: "لم يُرجع Gemini أي تحليل. حاول مجددًا." });
     }
 
     res.json({ analysis });
-  } catch (err) {
+  } catch (err: any) {
     req.log.error(err);
-    res.status(500).json({ error: "حدث خطأ أثناء التحليل الذكي." });
+    res.status(500).json({ error: `حدث خطأ أثناء التحليل الذكي: ${err?.message ?? "خطأ غير معروف"}` });
   }
 });
 
