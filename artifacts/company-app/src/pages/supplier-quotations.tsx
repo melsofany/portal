@@ -114,7 +114,11 @@ interface AnalysisData {
     companyName: string;
     responseStatus: "pending" | "submitted";
     responseSubmittedAt: string | null;
-    prices: { rfqItemId: number; unitPrice: string; notes: string }[];
+    paymentTerms: string | null;
+    offerValidityDays: number | null;
+    responseNotes: string | null;
+    deliveryDays: number | null;
+    prices: { rfqItemId: number; unitPrice: string; notes: string; deliveryDays: number | null; vatIncluded: string }[];
   }[];
 }
 
@@ -586,6 +590,45 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
                       </table>
                     </div>
                   </div>
+
+                  {/* Supplier Terms Section */}
+                  {submittedSuppliers.some(s => s.paymentTerms || s.offerValidityDays || s.deliveryDays || s.responseNotes) && (
+                    <div className="border border-slate-200 rounded overflow-hidden">
+                      <div className="bg-[#dce3ec] px-4 py-2 text-[11px] font-semibold text-slate-700 border-b border-slate-300">شروط الموردين</div>
+                      <div className="overflow-auto">
+                        <table className="w-full text-xs text-right min-w-[500px]">
+                          <thead>
+                            <tr className="bg-[#f0f4f8] border-b border-slate-200">
+                              <TH>المورد</TH>
+                              <TH className="text-center">شروط الدفع</TH>
+                              <TH className="text-center">صلاحية العرض</TH>
+                              <TH className="text-center">مدة التوريد</TH>
+                              <TH className="text-center">ملاحظات المورد</TH>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {submittedSuppliers.map((s, idx) => (
+                              <tr key={s.id} className={`border-b border-slate-100 last:border-0 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                                <td className="px-3 py-2.5 font-medium text-slate-800">{s.companyName}</td>
+                                <td className="px-3 py-2.5 text-center text-slate-600">
+                                  {s.paymentTerms ? <span className="bg-blue-50 text-blue-700 border border-blue-200 rounded px-2 py-0.5 text-[11px]">{s.paymentTerms}</span> : <span className="text-slate-300">—</span>}
+                                </td>
+                                <td className="px-3 py-2.5 text-center">
+                                  {s.offerValidityDays ? <span className="bg-slate-100 text-slate-700 rounded px-2 py-0.5 text-[11px] font-mono">{s.offerValidityDays} يوم</span> : <span className="text-slate-300">—</span>}
+                                </td>
+                                <td className="px-3 py-2.5 text-center">
+                                  {s.deliveryDays ? <span className="bg-amber-50 text-amber-700 border border-amber-200 rounded px-2 py-0.5 text-[11px] font-mono">{s.deliveryDays} يوم</span> : <span className="text-slate-300">—</span>}
+                                </td>
+                                <td className="px-3 py-2.5 text-center text-slate-600 text-[11px]">
+                                  {s.responseNotes ? s.responseNotes : <span className="text-slate-300">—</span>}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
 
                   {pendingSuppliers.length > 0 && (
                     <div className="text-[11px] text-slate-500 flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded px-3 py-2">

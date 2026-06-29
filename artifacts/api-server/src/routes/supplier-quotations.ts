@@ -363,6 +363,10 @@ router.get("/:id/analysis", async (req, res) => {
         responseStatus: supplierQuotationSuppliersTable.responseStatus,
         responseSubmittedAt: supplierQuotationSuppliersTable.responseSubmittedAt,
         token: supplierQuotationSuppliersTable.token,
+        paymentTerms: supplierQuotationSuppliersTable.paymentTerms,
+        offerValidityDays: supplierQuotationSuppliersTable.offerValidityDays,
+        responseNotes: supplierQuotationSuppliersTable.responseNotes,
+        deliveryDays: supplierQuotationSuppliersTable.deliveryDays,
       })
       .from(supplierQuotationSuppliersTable)
       .leftJoin(suppliersTable, eq(supplierQuotationSuppliersTable.supplierId, suppliersTable.id))
