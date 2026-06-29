@@ -512,42 +512,56 @@ ${termsSection}
 
 قدّم الإجابة بعناوين واضحة. كن دقيقاً وموضوعياً. ركّز على كشف الشذوذ بشكل خاص.`;
 
-    // Try models in order: 2.0-flash first, then 1.5-flash as fallback
-    const models = ["gemini-2.0-flash", "gemini-1.5-flash"];
+    // Discover available models first, then pick the best one
+    const modelsRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}`,
+      { signal: AbortSignal.timeout(10000) }
+    ).catch(() => null);
+
+    let chosenModel = "gemini-1.5-pro-latest";
+    if (modelsRes?.ok) {
+      const modelsData = await modelsRes.json() as any;
+      const available: string[] = (modelsData?.models ?? []).map((m: any) => m.name as string);
+      const preferred = [
+        "models/gemini-2.0-flash",
+        "models/gemini-2.0-flash-exp",
+        "models/gemini-1.5-flash-latest",
+        "models/gemini-1.5-flash",
+        "models/gemini-1.5-pro-latest",
+        "models/gemini-1.5-pro",
+        "models/gemini-pro",
+      ];
+      const found = preferred.find(m => available.includes(m));
+      if (found) chosenModel = found.replace("models/", "");
+      req.log.info({ available: available.slice(0, 10), chosen: chosenModel }, "Gemini model selected");
+    }
+
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${chosenModel}:generateContent?key=${geminiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
+        }),
+        signal: AbortSignal.timeout(30000),
+      }
+    );
+
     let geminiData: any = null;
-    let lastError = "";
-
-    for (const model of models) {
-      const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
-          }),
-          signal: AbortSignal.timeout(30000),
-        }
-      );
-
-      if (geminiRes.ok) {
-        geminiData = await geminiRes.json();
-        break;
-      }
-
+    if (geminiRes.ok) {
+      geminiData = await geminiRes.json();
+    } else {
       const errBody = await geminiRes.text();
-      req.log.error({ model, status: geminiRes.status, body: errBody }, "Gemini API error");
-      try {
-        const parsed = JSON.parse(errBody);
-        lastError = parsed?.error?.message ?? errBody;
-      } catch {
-        lastError = errBody.slice(0, 300);
-      }
+      req.log.error({ model: chosenModel, status: geminiRes.status, body: errBody }, "Gemini API error");
+      let errMsg = errBody;
+      try { errMsg = JSON.parse(errBody)?.error?.message ?? errBody; } catch {}
+      return res.status(502).json({ error: `خطأ من Gemini API (${chosenModel}): ${errMsg}` });
     }
 
     if (!geminiData) {
-      return res.status(502).json({ error: `خطأ من Gemini API: ${lastError}` });
+      return res.status(502).json({ error: "لم يُرجع Gemini أي تحليل. حاول مجددًا." });
     }
 
     const analysis = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
