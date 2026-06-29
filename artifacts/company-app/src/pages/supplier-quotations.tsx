@@ -318,6 +318,26 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
     queryFn: () => authFetchJson<AnalysisData>(`${API_BASE}/api/supplier-quotations/${rfqId}/analysis`),
   });
 
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  async function runAiAnalysis() {
+    setAiLoading(true);
+    setAiError(null);
+    setAiAnalysis(null);
+    try {
+      const res = await authFetch(`${API_BASE}/api/supplier-quotations/${rfqId}/ai-analysis`, { method: 'POST' });
+      const json = await res.json() as any;
+      if (!res.ok) throw new Error(json.error ?? 'حدث خطأ');
+      setAiAnalysis(json.analysis);
+    } catch (e: any) {
+      setAiError(e.message ?? 'حدث خطأ');
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
   const submittedSuppliers = data?.suppliers.filter(s => s.responseStatus === 'submitted') ?? [];
   const pendingSuppliers   = data?.suppliers.filter(s => s.responseStatus === 'pending')   ?? [];
   const totalSuppliers     = data?.suppliers.length ?? 0;
@@ -638,15 +658,56 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
                   )}
                 </>
               )}
+
+              {/* AI Analysis Result */}
+              {(aiLoading || aiAnalysis || aiError) && (
+                <div className="border border-purple-200 rounded overflow-hidden">
+                  <div className="bg-purple-50 px-4 py-2 text-[11px] font-semibold text-purple-800 border-b border-purple-200 flex items-center gap-2">
+                    <span>✨</span> تحليل الذكاء الاصطناعي
+                    {aiLoading && <Loader2 className="h-3 w-3 animate-spin text-purple-600 mr-auto" />}
+                  </div>
+                  <div className="p-4">
+                    {aiLoading && (
+                      <div className="flex items-center gap-2 text-purple-600 text-xs">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>جاري تحليل البيانات بالذكاء الاصطناعي…</span>
+                      </div>
+                    )}
+                    {aiError && (
+                      <p className="text-red-600 text-xs">{aiError}</p>
+                    )}
+                    {aiAnalysis && (
+                      <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap font-sans" dir="rtl">
+                        {aiAnalysis.split('\n').map((line, i) => {
+                          const isBold = line.startsWith('**') || line.startsWith('##') || line.startsWith('###') || /^\d+\.\s+\*\*/.test(line);
+                          const cleaned = line.replace(/\*\*/g, '').replace(/^#+\s*/, '').replace(/^-\s/, '• ');
+                          if (!cleaned.trim()) return <div key={i} className="h-2" />;
+                          if (isBold) return <p key={i} className="font-bold text-slate-900 mt-2 mb-1">{cleaned}</p>;
+                          return <p key={i} className="mb-0.5">{cleaned}</p>;
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
 
         <div className="border-t border-slate-200 px-5 py-3 flex items-center justify-between bg-[#f8fafc]">
-          <button onClick={printAnalysis} disabled={!data || submittedSuppliers.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 bg-white text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded">
-            <FileText className="h-3.5 w-3.5" /> طباعة التحليل
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={printAnalysis} disabled={!data || submittedSuppliers.length === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 bg-white text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded">
+              <FileText className="h-3.5 w-3.5" /> طباعة التحليل
+            </button>
+            <button
+              onClick={runAiAnalysis}
+              disabled={aiLoading || !data || submittedSuppliers.length === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-purple-300 bg-purple-50 text-xs text-purple-700 hover:bg-purple-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded">
+              {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <span>✨</span>}
+              تحليل ذكي
+            </button>
+          </div>
           <button onClick={onClose} className="px-4 py-1.5 border border-slate-300 bg-white text-xs text-slate-700 hover:bg-slate-50 rounded transition-colors">إغلاق</button>
         </div>
       </div>

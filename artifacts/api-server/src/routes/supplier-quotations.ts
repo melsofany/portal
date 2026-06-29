@@ -394,6 +394,124 @@ router.get("/:id/analysis", async (req, res) => {
   }
 });
 
+// ─── POST /api/supplier-quotations/:id/ai-analysis ──────────────────────────
+router.post("/:id/ai-analysis", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    // Load Gemini API key from company settings
+    const [settings] = await db.select({ geminiApiKey: companySettingsTable.geminiApiKey }).from(companySettingsTable).limit(1);
+    const geminiKey = settings?.geminiApiKey?.trim() || process.env.GEMINI_API_KEY;
+    if (!geminiKey) {
+      return res.status(400).json({ error: "لم يتم تعيين مفتاح Gemini API. يرجى إضافته في الإعدادات." });
+    }
+
+    // Load items
+    const items = await db
+      .select()
+      .from(supplierQuotationItemsTable)
+      .where(eq(supplierQuotationItemsTable.rfqId, id))
+      .orderBy(supplierQuotationItemsTable.sortOrder);
+
+    // Load suppliers with terms
+    const rfqSuppliers = await db
+      .select({
+        id: supplierQuotationSuppliersTable.id,
+        companyName: suppliersTable.companyName,
+        responseStatus: supplierQuotationSuppliersTable.responseStatus,
+        paymentTerms: supplierQuotationSuppliersTable.paymentTerms,
+        offerValidityDays: supplierQuotationSuppliersTable.offerValidityDays,
+        responseNotes: supplierQuotationSuppliersTable.responseNotes,
+        deliveryDays: supplierQuotationSuppliersTable.deliveryDays,
+      })
+      .from(supplierQuotationSuppliersTable)
+      .leftJoin(suppliersTable, eq(supplierQuotationSuppliersTable.supplierId, suppliersTable.id))
+      .where(eq(supplierQuotationSuppliersTable.rfqId, id));
+
+    const submitted = rfqSuppliers.filter(s => s.responseStatus === 'submitted');
+    if (submitted.length === 0) {
+      return res.status(400).json({ error: "لا يوجد موردون استجابوا بعد." });
+    }
+
+    // Load prices
+    const rfqSupplierIds = rfqSuppliers.map(s => s.id);
+    const prices = rfqSupplierIds.length > 0
+      ? await db.select().from(supplierQuotationItemPricesTable).where(inArray(supplierQuotationItemPricesTable.rfqSupplierId, rfqSupplierIds))
+      : [];
+
+    // Build prompt
+    const itemsSection = items.map((item, idx) => {
+      const row = submitted.map(s => {
+        const p = prices.find(pr => pr.rfqSupplierId === s.id && pr.rfqItemId === item.id);
+        const price = p?.unitPrice ? parseFloat(p.unitPrice) : null;
+        const qty = parseFloat(item.quantity) || 0;
+        const total = price !== null && price > 0 ? (price * qty).toFixed(3) : "—";
+        const days = p?.deliveryDays ? `${p.deliveryDays} يوم` : "—";
+        const note = p?.notes?.trim() || "—";
+        return `    ${s.companyName}: سعر الوحدة=${price !== null && price > 0 ? price.toFixed(3) : "لم يسعّر"}, الإجمالي=${total}, مدة التوريد=${days}, ملاحظة=${note}`;
+      }).join("\n");
+      return `${idx + 1}. ${item.description}${item.partNo ? ` (${item.partNo})` : ""} — الكمية: ${item.quantity} ${item.unit || ""}\n${row}`;
+    }).join("\n\n");
+
+    const termsSection = submitted.map(s => {
+      const total = items.reduce((sum, item) => {
+        const p = prices.find(pr => pr.rfqSupplierId === s.id && pr.rfqItemId === item.id);
+        const price = p?.unitPrice ? parseFloat(p.unitPrice) : 0;
+        const qty = parseFloat(item.quantity) || 0;
+        return sum + (price > 0 ? price * qty : 0);
+      }, 0);
+      return `- ${s.companyName}: الإجمالي الكلي=${total > 0 ? total.toFixed(3) : "—"}, شروط الدفع=${s.paymentTerms || "—"}, صلاحية العرض=${s.offerValidityDays ? s.offerValidityDays + " يوم" : "—"}, مدة التوريد الإجمالية=${s.deliveryDays ? s.deliveryDays + " يوم" : "—"}, ملاحظات=${s.responseNotes || "—"}`;
+    }).join("\n");
+
+    const prompt = `أنت مستشار مشتريات خبير. حلّل عروض أسعار الموردين التالية واقدّم توصيتك بشكل واضح ومنظم باللغة العربية.
+
+== مقارنة الأسعار بند بند ==
+${itemsSection}
+
+== ملخص شروط الموردين ==
+${termsSection}
+
+المطلوب منك:
+1. **أفضل مورد من حيث السعر الإجمالي** — اذكر الاسم والإجمالي والنسبة المئوية للوفر مقارنة بأغلى عرض.
+2. **تحليل بند بند** — لكل بند اذكر المورد الأفضل سعرًا والفارق.
+3. **تقييم شروط الموردين** — قيّم شروط الدفع وصلاحية العرض ومدة التوريد لكل مورد.
+4. **توصية نهائية** — بناءً على كل العوامل (السعر + الشروط + التغطية)، من تنصح بالتعامل معه ولماذا؟
+5. **تحذيرات** — أي ملاحظات تستحق الانتباه (سعر مرتفع جدًا، بنود غير مسعّرة، شروط غير مناسبة).
+
+قدّم الإجابة بشكل منظم مع عناوين واضحة. كن موضوعيًا ودقيقًا.`;
+
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
+        }),
+        signal: AbortSignal.timeout(30000),
+      }
+    );
+
+    if (!geminiRes.ok) {
+      const errText = await geminiRes.text();
+      req.log.error({ status: geminiRes.status, body: errText }, "Gemini API error");
+      return res.status(502).json({ error: "فشل الاتصال بـ Gemini API. تحقق من صحة المفتاح." });
+    }
+
+    const geminiData = await geminiRes.json() as any;
+    const analysis = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    if (!analysis) {
+      return res.status(502).json({ error: "لم يُرجع Gemini أي تحليل. حاول مجددًا." });
+    }
+
+    res.json({ analysis });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "حدث خطأ أثناء التحليل الذكي." });
+  }
+});
+
 // ─── GET /api/supplier-quotations ───────────────────────────────────────────
 router.get("/", async (req, res) => {
   try {
