@@ -694,7 +694,26 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
                       </div>
                     )}
                     {aiError && (
-                      <p className="text-red-600 text-xs">{aiError}</p>
+                      <div className="text-xs space-y-1.5">
+                        {aiError.toLowerCase().includes('quota') || aiError.toLowerCase().includes('exceeded') ? (
+                          <div className="bg-amber-50 border border-amber-200 rounded p-3 space-y-1">
+                            <p className="font-semibold text-amber-800">⚠️ تم استنفاد حصة Gemini AI المجانية</p>
+                            <p className="text-amber-700">يجب تفعيل الفوترة (Billing) في حسابك على Google Cloud لمتابعة استخدام الذكاء الاصطناعي.</p>
+                            <div className="flex gap-2 mt-2 flex-wrap">
+                              <a href="https://console.cloud.google.com/billing" target="_blank" rel="noreferrer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-600 text-white rounded text-[11px] hover:bg-amber-700">
+                                تفعيل الفوترة
+                              </a>
+                              <a href="https://ai.dev/rate-limit" target="_blank" rel="noreferrer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 border border-amber-400 text-amber-700 rounded text-[11px] hover:bg-amber-50">
+                                مراقبة الاستخدام
+                              </a>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-red-600">{aiError}</p>
+                        )}
+                      </div>
                     )}
                     {aiAnalysis && (
                       <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap font-sans" dir="rtl">
