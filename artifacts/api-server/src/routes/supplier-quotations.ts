@@ -463,22 +463,54 @@ router.post("/:id/ai-analysis", async (req, res) => {
       return `- ${s.companyName}: الإجمالي الكلي=${total > 0 ? total.toFixed(3) : "—"}, شروط الدفع=${s.paymentTerms || "—"}, صلاحية العرض=${s.offerValidityDays ? s.offerValidityDays + " يوم" : "—"}, مدة التوريد الإجمالية=${s.deliveryDays ? s.deliveryDays + " يوم" : "—"}, ملاحظات=${s.responseNotes || "—"}`;
     }).join("\n");
 
-    const prompt = `أنت مستشار مشتريات خبير. حلّل عروض أسعار الموردين التالية واقدّم توصيتك بشكل واضح ومنظم باللغة العربية.
+    // Compute per-item price statistics for anomaly context
+    const statsSection = items.map((item, idx) => {
+      const itemPrices = submitted
+        .map(s => { const p = prices.find(pr => pr.rfqSupplierId === s.id && pr.rfqItemId === item.id); const v = parseFloat(p?.unitPrice ?? "0"); return v > 0 ? v : null; })
+        .filter((v): v is number => v !== null);
+      if (itemPrices.length < 2) return null;
+      const avg = itemPrices.reduce((a, b) => a + b, 0) / itemPrices.length;
+      const min = Math.min(...itemPrices);
+      const max = Math.max(...itemPrices);
+      const spread = avg > 0 ? ((max - min) / avg * 100).toFixed(1) : "0";
+      const anomalies = submitted.map(s => {
+        const p = prices.find(pr => pr.rfqSupplierId === s.id && pr.rfqItemId === item.id);
+        const v = parseFloat(p?.unitPrice ?? "0");
+        if (v <= 0) return null;
+        const ratio = v / avg;
+        if (ratio > 1.5) return `${s.companyName} (${v.toFixed(3)} — أعلى من المتوسط بنسبة ${((ratio - 1) * 100).toFixed(0)}%)`;
+        if (ratio < 0.5) return `${s.companyName} (${v.toFixed(3)} — أقل من المتوسط بنسبة ${((1 - ratio) * 100).toFixed(0)}%)`;
+        return null;
+      }).filter(Boolean);
+      return `${idx + 1}. ${item.description}: متوسط=${avg.toFixed(3)}, أدنى=${min.toFixed(3)}, أعلى=${max.toFixed(3)}, فارق=${spread}%${anomalies.length ? `\n   ⚠️ شذوذ محتمل: ${anomalies.join(" | ")}` : ""}`;
+    }).filter(Boolean).join("\n");
+
+    const prompt = `أنت مستشار مشتريات خبير ومحلل بيانات. حلّل عروض أسعار الموردين التالية واكتشف الشذوذ في الأسعار.
 
 == مقارنة الأسعار بند بند ==
 ${itemsSection}
+
+== إحصائيات الأسعار وكشف الشذوذ الأولي ==
+${statsSection || "لا تتوفر بيانات كافية للمقارنة الإحصائية"}
 
 == ملخص شروط الموردين ==
 ${termsSection}
 
 المطلوب منك:
-1. **أفضل مورد من حيث السعر الإجمالي** — اذكر الاسم والإجمالي والنسبة المئوية للوفر مقارنة بأغلى عرض.
-2. **تحليل بند بند** — لكل بند اذكر المورد الأفضل سعرًا والفارق.
-3. **تقييم شروط الموردين** — قيّم شروط الدفع وصلاحية العرض ومدة التوريد لكل مورد.
-4. **توصية نهائية** — بناءً على كل العوامل (السعر + الشروط + التغطية)، من تنصح بالتعامل معه ولماذا؟
-5. **تحذيرات** — أي ملاحظات تستحق الانتباه (سعر مرتفع جدًا، بنود غير مسعّرة، شروط غير مناسبة).
 
-قدّم الإجابة بشكل منظم مع عناوين واضحة. كن موضوعيًا ودقيقًا.`;
+**1. كشف شذوذ الأسعار (الأهم)**
+- حدد كل سعر يتجاوز 50% فوق أو تحت متوسط نفس البند
+- اذكر: اسم البند، اسم المورد، السعر الشاذ، متوسط السعر، ونسبة الانحراف
+- صنّف الشذوذ: هل هو مرتفع بشكل مشبوه؟ أم منخفض بشكل مقلق قد يُشير لجودة رديئة أو خطأ في التسعير؟
+- لو كل الموردين اتفقوا على سعر متقارب وواحد انفرد بسعر مختلف جداً، أشر لذلك خصوصاً.
+
+**2. أفضل مورد إجمالاً** — السعر الكلي + الوفر مقارنة بأغلى عرض.
+
+**3. توصية نهائية** — بناءً على السعر + الشذوذ + الشروط + التغطية، من تنصح بالتعامل معه؟
+
+**4. تحذيرات إجمالية** — بنود غير مسعّرة، شروط مجحفة، موردون بنسبة تغطية منخفضة.
+
+قدّم الإجابة بعناوين واضحة. كن دقيقاً وموضوعياً. ركّز على كشف الشذوذ بشكل خاص.`;
 
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,

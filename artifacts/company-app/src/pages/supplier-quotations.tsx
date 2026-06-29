@@ -562,25 +562,45 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
                         <tbody>
                           {data.items.map((item, idx) => {
                             const best = getBestPrice(item.id);
+                            // Anomaly detection: compute avg for this item across submitted suppliers
+                            const itemPrices = submittedSuppliers.map(s => getPrice(s, item.id)).filter((p): p is number => p !== null && p > 0);
+                            const avg = itemPrices.length >= 2 ? itemPrices.reduce((a, b) => a + b, 0) / itemPrices.length : null;
+                            const hasAnomaly = avg !== null && itemPrices.some(p => p / avg > 1.5 || p / avg < 0.5);
                             return (
                               <tr key={item.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
                                 <td className={`px-3 py-2 font-medium sticky right-0 z-10 border-l border-slate-200 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
-                                  <div className="truncate max-w-[180px]" title={item.description}>{item.description}</div>
-                                  {item.partNo && <div className="text-[10px] text-slate-400">{item.partNo}</div>}
+                                  <div className="flex items-center gap-1">
+                                    {hasAnomaly && <span title="يوجد شذوذ في أسعار هذا البند" className="text-orange-500 text-[11px] shrink-0">⚠️</span>}
+                                    <div className="truncate max-w-[170px]" title={item.description}>{item.description}</div>
+                                  </div>
+                                  {item.partNo && <div className="text-[10px] text-slate-400 mr-4">{item.partNo}</div>}
+                                  {avg !== null && <div className="text-[10px] text-slate-400 mt-0.5 mr-4 font-mono">متوسط: {avg.toFixed(3)}</div>}
                                 </td>
                                 <td className="px-3 py-2 text-center text-slate-500 font-mono text-[11px]">{fmtQty(item.quantity)} {item.unit}</td>
                                 {submittedSuppliers.map(s => {
                                   const price = getPrice(s, item.id);
                                   const qty = parseFloat(item.quantity) || 0;
                                   const isBest = price !== null && price > 0 && best !== null && price === best;
+                                  const ratio = avg !== null && price !== null && price > 0 ? price / avg : 1;
+                                  const isHigh = avg !== null && ratio > 1.5;
+                                  const isLow  = avg !== null && ratio < 0.5 && price !== null && price > 0;
+                                  const anomalyPct = avg !== null && price !== null && price > 0
+                                    ? (ratio > 1 ? `+${((ratio - 1) * 100).toFixed(0)}%` : `-${((1 - ratio) * 100).toFixed(0)}%`)
+                                    : null;
                                   return (
-                                    <td key={s.id} className={`px-3 py-2 text-center border-l border-slate-100 ${isBest ? 'bg-emerald-50' : ''}`}>
+                                    <td key={s.id} className={`px-3 py-2 text-center border-l border-slate-100 ${isBest ? 'bg-emerald-50' : isHigh ? 'bg-red-50' : isLow ? 'bg-yellow-50' : ''}`}>
                                       {price !== null && price > 0 ? (
                                         <div>
-                                          <div className={`font-mono font-semibold ${isBest ? 'text-emerald-700' : 'text-slate-800'}`}>
-                                            {price.toFixed(3)}{isBest && <span className="mr-1 text-[10px] text-emerald-500">★</span>}
+                                          <div className={`font-mono font-semibold ${isBest ? 'text-emerald-700' : isHigh ? 'text-red-700' : isLow ? 'text-yellow-700' : 'text-slate-800'}`}>
+                                            {price.toFixed(3)}
+                                            {isBest && <span className="mr-1 text-[10px] text-emerald-500">★</span>}
+                                            {isHigh && <span className="mr-1 text-[9px] bg-red-100 text-red-600 rounded px-0.5 font-bold">مرتفع</span>}
+                                            {isLow  && <span className="mr-1 text-[9px] bg-yellow-100 text-yellow-700 rounded px-0.5 font-bold">منخفض</span>}
                                           </div>
-                                          <div className={`text-[10px] font-mono ${isBest ? 'text-emerald-400' : 'text-slate-400'}`}>{(price * qty).toFixed(3)}</div>
+                                          <div className="flex items-center justify-center gap-1">
+                                            <div className={`text-[10px] font-mono ${isBest ? 'text-emerald-400' : isHigh ? 'text-red-400' : isLow ? 'text-yellow-600' : 'text-slate-400'}`}>{(price * qty).toFixed(3)}</div>
+                                            {(isHigh || isLow) && anomalyPct && avg !== null && <div className={`text-[9px] font-bold ${isHigh ? 'text-red-500' : 'text-yellow-600'}`}>{anomalyPct}</div>}
+                                          </div>
                                         </div>
                                       ) : <span className="text-slate-300 text-[11px]">—</span>}
                                     </td>
