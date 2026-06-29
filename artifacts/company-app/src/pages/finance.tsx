@@ -61,6 +61,8 @@ interface SupplierPayment {
   receiptFileType: string;
   notes: string;
   status: string;
+  paymentType: string;
+  dueDate: string;
   createdAt: string;
 }
 
@@ -74,6 +76,7 @@ function paymentMethodLabel(m: SupplierPaymentMethod): string {
 
 function statusBadge(s: string) {
   if (s === "مدفوع") return "bg-green-100 text-green-700";
+  if (s === "آجل") return "bg-amber-100 text-amber-700";
   if (s === "ملغي") return "bg-red-100 text-red-700";
   return "bg-slate-100 text-slate-600";
 }
@@ -117,6 +120,9 @@ export default function FinancePage() {
   const [receiptFile, setReceiptFile] = useState<{ data: string; name: string; type: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [paymentType, setPaymentType] = useState<"فوري" | "آجل">("فوري");
+  const [dueDate, setDueDate] = useState("");
+
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
@@ -153,6 +159,8 @@ export default function FinancePage() {
     setReceiptFile(null);
     setSaveError("");
     setOrderSearch("");
+    setPaymentType("فوري");
+    setDueDate("");
     setSupplierPaymentMethods([]);
     try {
       const r = await fetch(`${API_BASE}/api/supplier-orders`, { credentials: "include" });
@@ -222,7 +230,8 @@ export default function FinancePage() {
   async function handleSave() {
     if (!selectedOrder) { setSaveError("يرجى اختيار أمر الشراء"); return; }
     if (!paymentDate) { setSaveError("تاريخ الدفع مطلوب"); return; }
-    if (!referenceNo.trim()) { setSaveError("رقم الإيصال / المرجع مطلوب"); return; }
+    if (paymentType === "آجل" && !dueDate) { setSaveError("تاريخ الاستحقاق مطلوب للدفع الآجل"); return; }
+    if (paymentType === "فوري" && !referenceNo.trim()) { setSaveError("رقم الإيصال / المرجع مطلوب"); return; }
     if (!paymentMethod) { setSaveError("يرجى اختيار طريقة الدفع"); return; }
     setSaving(true);
     setSaveError("");
@@ -241,6 +250,8 @@ export default function FinancePage() {
           receiptFileName: receiptFile?.name ?? "",
           receiptFileType: receiptFile?.type ?? "",
           notes,
+          paymentType,
+          dueDate,
         }),
       });
       const data = await r.json();
@@ -330,6 +341,13 @@ export default function FinancePage() {
             </p>
             <p className="text-xs text-slate-400 mt-0.5">مورد مختلف</p>
           </div>
+          <div className="rounded-xl bg-amber-50 border border-amber-200 shadow-sm p-5">
+            <p className="text-xs text-amber-600 font-medium">مدفوعات آجلة</p>
+            <p className="text-2xl font-bold text-amber-600 mt-1">
+              {payments.filter((p) => p.status === "آجل").length}
+            </p>
+            <p className="text-xs text-amber-400 mt-0.5">في انتظار السداد</p>
+          </div>
         </div>
 
         {/* Search */}
@@ -349,8 +367,9 @@ export default function FinancePage() {
                 <th className="px-4 py-3 font-medium text-slate-500">المورد</th>
                 <th className="px-4 py-3 font-medium text-slate-500">المبلغ (جنيه)</th>
                 <th className="px-4 py-3 font-medium text-slate-500">تاريخ الدفع</th>
+                <th className="px-4 py-3 font-medium text-slate-500">تاريخ الاستحقاق</th>
                 <th className="px-4 py-3 font-medium text-slate-500">طريقة الدفع</th>
-                <th className="px-4 py-3 font-medium text-slate-500">رقم الإيصال / المرجع</th>
+                <th className="px-4 py-3 font-medium text-slate-500">رقم المرجع</th>
                 <th className="px-4 py-3 font-medium text-slate-500">الإيصال</th>
                 <th className="px-4 py-3 font-medium text-slate-500">الحالة</th>
                 <th className="px-4 py-3"></th>
@@ -358,20 +377,21 @@ export default function FinancePage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
-                <tr><td colSpan={10} className="py-12 text-center text-slate-400">
+                <tr><td colSpan={11} className="py-12 text-center text-slate-400">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                 </td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={10} className="py-12 text-center text-slate-400">
+                <tr><td colSpan={11} className="py-12 text-center text-slate-400">
                   لا توجد مدفوعات حتى الآن
                 </td></tr>
               ) : filtered.map((p) => (
-                <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                <tr key={p.id} className={`hover:bg-slate-50 transition-colors ${p.status === "آجل" ? "bg-amber-50/30" : ""}`}>
                   <td className="px-4 py-3 font-mono font-medium text-[#1e3a5f] text-xs">{p.paymentNo}</td>
                   <td className="px-4 py-3 text-slate-700">{p.orderNo}</td>
                   <td className="px-4 py-3 text-slate-700">{p.supplierName || "—"}</td>
                   <td className="px-4 py-3 font-semibold text-slate-800">{fmt(p.amount)}</td>
                   <td className="px-4 py-3 text-slate-600">{p.paymentDate}</td>
+                  <td className="px-4 py-3 text-amber-700 font-medium">{p.dueDate || "—"}</td>
                   <td className="px-4 py-3 text-slate-600">{p.paymentMethod}</td>
                   <td className="px-4 py-3 font-mono text-slate-700 text-xs">{p.referenceNo || "—"}</td>
                   <td className="px-4 py-3">
@@ -463,11 +483,48 @@ export default function FinancePage() {
               </div>
             )}
 
-            {/* Step 2: Payment details */}
+            {/* Step 2: Payment type toggle */}
+            {selectedOrder && !alreadyPaid && !checkingPaid && !loadingMethods && (
+              <div className="border-t border-slate-100 pt-4">
+                <Label className="text-sm font-semibold text-slate-700 block mb-3">ثانياً: نوع الدفع</Label>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentType("فوري")}
+                    className={`flex-1 py-2.5 px-4 rounded-lg border-2 text-sm font-medium transition-colors ${
+                      paymentType === "فوري"
+                        ? "border-[#1e3a5f] bg-[#1e3a5f] text-white"
+                        : "border-slate-200 text-slate-600 hover:border-slate-300"
+                    }`}
+                  >
+                    دفع فوري
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentType("آجل")}
+                    className={`flex-1 py-2.5 px-4 rounded-lg border-2 text-sm font-medium transition-colors ${
+                      paymentType === "آجل"
+                        ? "border-amber-500 bg-amber-500 text-white"
+                        : "border-slate-200 text-slate-600 hover:border-slate-300"
+                    }`}
+                  >
+                    دفع آجل (مؤجل)
+                  </button>
+                </div>
+                {paymentType === "آجل" && (
+                  <div className="mt-2 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-amber-700 text-xs">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    الدفع الآجل يعني تسجيل الالتزام الآن مع تحديد تاريخ السداد لاحقاً — لن يُعلَّم أمر الشراء كمكتمل حتى يتم الدفع الفعلي
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 3: Payment details */}
             {selectedOrder && !alreadyPaid && !checkingPaid && !loadingMethods && (
               <>
-                <div className="border-t border-slate-100 pt-4 space-y-4">
-                  <Label className="text-sm font-semibold text-slate-700">ثانياً: بيانات الدفع</Label>
+                <div className="space-y-4">
+                  <Label className="text-sm font-semibold text-slate-700">ثالثاً: بيانات الدفع</Label>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
@@ -476,9 +533,18 @@ export default function FinancePage() {
                         onChange={(e) => setAmount(e.target.value)} placeholder="0.000" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs text-slate-500">تاريخ الدفع *</Label>
+                      <Label className="text-xs text-slate-500">
+                        {paymentType === "آجل" ? "تاريخ تسجيل الالتزام *" : "تاريخ الدفع *"}
+                      </Label>
                       <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
                     </div>
+                    {paymentType === "آجل" && (
+                      <div className="space-y-1 col-span-2">
+                        <Label className="text-xs text-slate-500">تاريخ الاستحقاق (موعد السداد) *</Label>
+                        <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                        <p className="text-xs text-slate-400">التاريخ المتفق عليه لسداد المبلغ للمورد</p>
+                      </div>
+                    )}
                     <div className="space-y-1 col-span-2">
                       <Label className="text-xs text-slate-500">طريقة الدفع *</Label>
                       {supplierPaymentMethods.length > 0 ? (
@@ -512,10 +578,14 @@ export default function FinancePage() {
                       )}
                     </div>
                     <div className="space-y-1 col-span-2">
-                      <Label className="text-xs text-slate-500">رقم الإيصال / المرجع *</Label>
+                      <Label className="text-xs text-slate-500">
+                        رقم الإيصال / المرجع {paymentType === "فوري" ? "*" : "(اختياري للآجل)"}
+                      </Label>
                       <Input value={referenceNo} onChange={(e) => setReferenceNo(e.target.value)}
                         placeholder="مثال: RCP-001 أو TXN123456" />
-                      <p className="text-xs text-slate-400">لا يمكن تكرار نفس الرقم في دفعتين</p>
+                      {paymentType === "فوري" && (
+                        <p className="text-xs text-slate-400">لا يمكن تكرار نفس الرقم في دفعتين</p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -564,9 +634,9 @@ export default function FinancePage() {
             <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
             <Button onClick={handleSave}
               disabled={saving || !selectedOrder || alreadyPaid || checkingPaid || loadingMethods}
-              className="bg-[#1e3a5f] hover:bg-[#162d4a] gap-2">
+              className={`gap-2 ${paymentType === "آجل" ? "bg-amber-500 hover:bg-amber-600" : "bg-[#1e3a5f] hover:bg-[#162d4a]"}`}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-              تسجيل الدفعة
+              {paymentType === "آجل" ? "تسجيل الدفع الآجل" : "تسجيل الدفعة"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -307,6 +307,12 @@ import { pool } from "@workspace/db";
           );
         `);
 
+        // Add deferred payment columns to supplier_payments
+        await client.query(`
+          ALTER TABLE supplier_payments ADD COLUMN IF NOT EXISTS payment_type TEXT NOT NULL DEFAULT 'فوري';
+          ALTER TABLE supplier_payments ADD COLUMN IF NOT EXISTS due_date TEXT DEFAULT '';
+        `);
+
         // Fix existing supplier orders that have payments but status is still مفتوح
         await client.query(`
           UPDATE supplier_orders

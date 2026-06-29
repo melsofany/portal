@@ -83,7 +83,11 @@ router.post("/", async (req, res) => {
       receiptFileName,
       receiptFileType,
       notes,
+      paymentType,
+      dueDate,
     } = req.body;
+
+    const isDeferred = paymentType === "آجل";
 
     if (!supplierOrderId) {
       return res.status(400).json({ error: "أمر الشراء مطلوب" });
@@ -91,8 +95,11 @@ router.post("/", async (req, res) => {
     if (!paymentDate) {
       return res.status(400).json({ error: "تاريخ الدفع مطلوب" });
     }
+    if (isDeferred && !dueDate) {
+      return res.status(400).json({ error: "تاريخ الاستحقاق مطلوب للدفع الآجل" });
+    }
     const refNo = referenceNo?.trim() ?? "";
-    if (!refNo) {
+    if (!isDeferred && !refNo) {
       return res.status(400).json({ error: "رقم الإيصال / المرجع مطلوب" });
     }
 
@@ -109,17 +116,19 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // Prevent duplicate reference number across all payments
-    const existingRef = await db
-      .select({ paymentNo: supplierPaymentsTable.paymentNo })
-      .from(supplierPaymentsTable)
-      .where(eq(supplierPaymentsTable.referenceNo, refNo));
-    if (existingRef.length > 0) {
-      return res.status(409).json({
-        error:
-          "رقم الإيصال/المرجع \"" + refNo + "\" مستخدم مسبقاً في دفعة رقم: " +
-          existingRef[0].paymentNo,
-      });
+    // Prevent duplicate reference number across all payments (only for immediate payments with a ref)
+    if (!isDeferred && refNo) {
+      const existingRef = await db
+        .select({ paymentNo: supplierPaymentsTable.paymentNo })
+        .from(supplierPaymentsTable)
+        .where(eq(supplierPaymentsTable.referenceNo, refNo));
+      if (existingRef.length > 0) {
+        return res.status(409).json({
+          error:
+            "رقم الإيصال/المرجع \"" + refNo + "\" مستخدم مسبقاً في دفعة رقم: " +
+            existingRef[0].paymentNo,
+        });
+      }
     }
 
     const [order] = await db
@@ -131,6 +140,7 @@ router.post("/", async (req, res) => {
     }
 
     const paymentNo = generatePaymentNo();
+    const status = isDeferred ? "آجل" : "مدفوع";
 
     const [payment] = await db
       .insert(supplierPaymentsTable)
@@ -148,15 +158,19 @@ router.post("/", async (req, res) => {
         receiptFileName: receiptFileName?.trim() ?? "",
         receiptFileType: receiptFileType?.trim() ?? "",
         notes: notes?.trim() ?? "",
-        status: "مدفوع",
-      })
+        status,
+        paymentType: isDeferred ? "آجل" : "فوري",
+        dueDate: isDeferred ? (dueDate?.trim() ?? "") : "",
+      } as any)
       .returning();
 
-    // Mark the supplier order as completed
-    await pool.query(
-      "UPDATE supplier_orders SET status = $1, updated_at = NOW() WHERE id = $2",
-      ["مكتمل", Number(supplierOrderId)]
-    );
+    // Mark the supplier order as completed only for immediate payments
+    if (!isDeferred) {
+      await pool.query(
+        "UPDATE supplier_orders SET status = $1, updated_at = NOW() WHERE id = $2",
+        ["مكتمل", Number(supplierOrderId)]
+      );
+    }
 
     const { receiptFileData: _, ...safePayment } = payment;
     res.status(201).json(safePayment);

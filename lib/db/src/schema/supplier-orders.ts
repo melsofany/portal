@@ -48,6 +48,8 @@ import { pgTable, text, serial, integer, timestamp, numeric } from "drizzle-orm/
       receiptFileType: text("receipt_file_type").default(""),
       notes: text("notes").default(""),
       status: text("status").notNull().default("مدفوع"),
+      paymentType: text("payment_type").notNull().default("فوري"),
+      dueDate: text("due_date").default(""),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
     });
