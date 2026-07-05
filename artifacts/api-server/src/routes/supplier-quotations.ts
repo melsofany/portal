@@ -793,8 +793,8 @@ router.post("/:id/send-all", async (req, res) => {
     const settingsRows = await db.select().from(companySettingsTable).limit(1);
     const settings = settingsRows[0] ?? null;
 
-    const waPhoneId = settings?.whatsappPhoneNumber || process.env.WHATSAPP_PHONE_NUMBER_ID || "";
-    const waToken = settings?.whatsappToken || process.env.WHATSAPP_ACCESS_TOKEN || "";
+    const waPhoneId = settings?.whatsappPhoneNumber || process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_NUMBER || "";
+    const waToken = settings?.whatsappToken || process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN || "";
     const waEnabled = !!(waPhoneId && waToken);
 
     // Build nodemailer transporter if SMTP is configured
