@@ -889,100 +889,133 @@ router.post("/:id/send-all", async (req, res) => {
         const whatsappRaw = sup.whatsapp || sup.phone || "";
         if (whatsappRaw) {
           const phone = whatsappRaw.replace(/\D/g, "");
-          const message = buildWhatsAppText(
-            rfq.rfqNo,
-            rfq.requestDate,
-            sup.companyName ?? "",
-            items,
-            rfqLink
-          );
 
           if (waEnabled) {
             try {
-              // Step 1: Send text message (includes the supplier link for online pricing)
-              const waRes = await fetch(
-                `https://graph.facebook.com/v19.0/${waPhoneId}/messages`,
-                {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${waToken}`,
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    messaging_product: "whatsapp",
-                    to: phone,
-                    type: "text",
-                    text: { body: message },
-                  }),
-                }
-              );
-              if (waRes.ok) {
-                sentChannels.push("whatsapp");
-              } else {
-                const errData = await waRes.json() as any;
-                errors.push(`WhatsApp text: ${errData?.error?.message ?? waRes.status}`);
-              }
+              // Resolve template name: DB settings → env var → hardcoded default
+              let templateName = "rfq_pdf_ar";
+              try {
+                const templates = JSON.parse(settings?.whatsappTemplates || "[]") as Array<{ name?: string; type?: string }>;
+                const pdfTpl = templates.find((t) => t.type === "rfq_pdf" || t.name?.includes("pdf"));
+                if (pdfTpl?.name) templateName = pdfTpl.name;
+              } catch {}
+              if (process.env.WHATSAPP_TEMPLATE_PDF) templateName = process.env.WHATSAPP_TEMPLATE_PDF;
+              const templateLang = process.env.WHATSAPP_TEMPLATE_LANG || "ar";
 
-              // Step 2: Upload PDF and send as document (if PDF was generated)
-              if (supplierPdfBuffer && sentChannels.includes("whatsapp")) {
+              // Param 4: sender name + phone
+              const contactText = senderPhone ? `${senderName} - ${senderPhone}` : senderName;
+              const pricingToken = sup.token || "";
+
+              let templateSent = false;
+
+              // ── Primary path: send approved template with PDF header ──
+              if (supplierPdfBuffer && pricingToken) {
                 try {
                   const pdfFilename = `RFQ-${rfq.rfqNo}.pdf`;
+
+                  // Step 1: Upload PDF to WhatsApp media
                   const formData = new FormData();
                   formData.append("messaging_product", "whatsapp");
                   formData.append("type", "application/pdf");
-                  formData.append(
-                    "file",
-                    new Blob([supplierPdfBuffer], { type: "application/pdf" }),
-                    pdfFilename
-                  );
+                  formData.append("file", new Blob([supplierPdfBuffer], { type: "application/pdf" }), pdfFilename);
+
                   const uploadRes = await fetch(
                     `https://graph.facebook.com/v19.0/${waPhoneId}/media`,
-                    {
-                      method: "POST",
-                      headers: { Authorization: `Bearer ${waToken}` },
-                      body: formData,
-                    }
+                    { method: "POST", headers: { Authorization: `Bearer ${waToken}` }, body: formData }
                   );
+
                   if (!uploadRes.ok) {
                     const uploadErr = await uploadRes.json() as any;
                     errors.push(`WhatsApp PDF upload: ${uploadErr?.error?.message ?? uploadRes.status}`);
+                    req.log.warn({ phone, rfqNo: rfq.rfqNo, uploadErr }, "PDF upload failed — will try text fallback");
                   } else {
                     const { id: mediaId } = await uploadRes.json() as any;
-                    const docRes = await fetch(
+
+                    // Step 2: Send template message with document header + body params + URL button
+                    const templateRes = await fetch(
                       `https://graph.facebook.com/v19.0/${waPhoneId}/messages`,
                       {
                         method: "POST",
-                        headers: {
-                          Authorization: `Bearer ${waToken}`,
-                          "Content-Type": "application/json",
-                        },
+                        headers: { Authorization: `Bearer ${waToken}`, "Content-Type": "application/json" },
                         body: JSON.stringify({
                           messaging_product: "whatsapp",
                           to: phone,
-                          type: "document",
-                          document: {
-                            id: mediaId,
-                            filename: pdfFilename,
-                            caption: `طلب تسعير ${rfq.rfqNo} — مرفق ملف PDF بالبنود التفصيلية`,
+                          type: "template",
+                          template: {
+                            name: templateName,
+                            language: { code: templateLang },
+                            components: [
+                              {
+                                type: "header",
+                                parameters: [{ type: "document", document: { id: mediaId, filename: pdfFilename } }],
+                              },
+                              {
+                                type: "body",
+                                parameters: [
+                                  { type: "text", text: sup.companyName ?? "عميلنا الكريم" },
+                                  { type: "text", text: rfq.rfqNo },
+                                  { type: "text", text: rfq.requestDate || new Date().toLocaleDateString("en-GB") },
+                                  { type: "text", text: contactText },
+                                ],
+                              },
+                              {
+                                type: "button",
+                                sub_type: "url",
+                                index: "0",
+                                parameters: [{ type: "text", text: pricingToken }],
+                              },
+                            ],
                           },
                         }),
                       }
                     );
-                    if (!docRes.ok) {
-                      const docErr = await docRes.json() as any;
-                      errors.push(`WhatsApp PDF send: ${docErr?.error?.message ?? docRes.status}`);
+
+                    if (templateRes.ok) {
+                      sentChannels.push("whatsapp");
+                      templateSent = true;
+                      req.log.info({ phone, rfqNo: rfq.rfqNo, templateName }, "WhatsApp template with PDF sent");
+                    } else {
+                      const templateErr = await templateRes.json() as any;
+                      errors.push(`WhatsApp template: ${templateErr?.error?.message ?? templateRes.status}`);
+                      req.log.warn({ phone, rfqNo: rfq.rfqNo, templateErr }, "WhatsApp template failed — will try text fallback");
                     }
                   }
-                } catch (pdfSendErr: any) {
-                  req.log.warn(pdfSendErr, "WhatsApp PDF document send failed");
-                  errors.push(`WhatsApp PDF: ${pdfSendErr.message}`);
+                } catch (templateSendErr: any) {
+                  errors.push(`WhatsApp template: ${templateSendErr.message}`);
+                  req.log.warn({ phone, rfqNo: rfq.rfqNo, err: templateSendErr.message }, "Template send error — will try text fallback");
+                }
+              }
+
+              // ── Fallback: plain text (only works within 24-hour customer window) ──
+              if (!templateSent) {
+                const message = buildWhatsAppText(rfq.rfqNo, rfq.requestDate, sup.companyName ?? "", items, rfqLink);
+                const waRes = await fetch(
+                  `https://graph.facebook.com/v19.0/${waPhoneId}/messages`,
+                  {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${waToken}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      messaging_product: "whatsapp",
+                      to: phone,
+                      type: "text",
+                      text: { body: message },
+                    }),
+                  }
+                );
+                if (waRes.ok) {
+                  sentChannels.push("whatsapp");
+                  req.log.info({ phone, rfqNo: rfq.rfqNo }, "WhatsApp fallback text sent");
+                } else {
+                  const errData = await waRes.json() as any;
+                  errors.push(`WhatsApp text: ${errData?.error?.message ?? waRes.status}`);
                 }
               }
             } catch (e: any) {
               errors.push(`WhatsApp: ${e.message}`);
             }
           } else {
-            // No WhatsApp API — return wa.me fallback link
+            // No WhatsApp API configured — return wa.me fallback link
+            const message = buildWhatsAppText(rfq.rfqNo, rfq.requestDate, sup.companyName ?? "", items, rfqLink);
             const waLink = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
             return {
               supplierId: sup.supplierId,
