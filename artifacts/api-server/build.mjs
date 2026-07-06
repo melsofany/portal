@@ -29,6 +29,10 @@ async function buildAll() {
     // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
     external: [
       "*.node",
+      // Baileys WhatsApp client — has native/complex deps, load from node_modules
+      "@whiskeysockets/baileys",
+      "@hapi/boom",
+      "qrcode",
       "sharp",
       "better-sqlite3",
       "sqlite3",
