@@ -1,113 +1,108 @@
-/**
- * WhatsApp routes — Baileys (open-source QR-based) for the chat page.
- * Meta webhook endpoints kept for compatibility with the supplier RFQ flow.
- */
-
 import { Router, type Request, type Response } from "express";
 import { pool } from "@workspace/db";
-import { logger } from "../lib/logger";
-import { requireAdmin } from "../middlewares/authMiddleware";
 import {
   verifyWebhook,
   processWebhookEvent,
+  onInboundMessage,
+  sendWhatsAppText,
+  isWhatsAppConfigured,
 } from "../lib/whatsapp";
-import {
-  connectBaileys,
-  reconnectBaileys,
-  disconnectBaileys,
-  sendBaileysText,
-  getStatus,
-  addSseClient,
-  removeSseClient,
-} from "../lib/baileys";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
-// ─── SSE — real-time events ───────────────────────────────────────────────────
+// ─── Public webhook handlers ─────────────────────────────────────────────────
+// Uses the open-source whatsapp-api-js library (official Meta Cloud API
+// wrapper) instead of hand-parsing the raw entry/changes payload shape.
 
-router.get("/events", requireAdmin, (req, res): void => {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders();
+export function webhookVerify(req: Request, res: Response): void {
+  const mode = req.query["hub.mode"];
+  const verify_token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+  if (mode !== "subscribe" || typeof verify_token !== "string" || typeof challenge !== "string") {
+    res.sendStatus(403);
+    return;
+  }
+  const result = verifyWebhook({ "hub.mode": mode, "hub.verify_token": verify_token, "hub.challenge": challenge });
+  if (typeof result === "string") {
+    res.status(200).send(result);
+  } else {
+    res.sendStatus(403);
+  }
+}
 
-  const hb = setInterval(() => {
-    try { res.write(": heartbeat\n\n"); } catch { clearInterval(hb); removeSseClient(res); }
-  }, 25_000);
-
-  addSseClient(res);
-  req.on("close", () => { clearInterval(hb); removeSseClient(res); });
+onInboundMessage(async (msg) => {
+  await pool.query(
+    `INSERT INTO whatsapp_messages
+       (direction, phone, contact_name, message_text, message_id, sent_at)
+     VALUES ($1,$2,$3,$4,$5,$6)
+     ON CONFLICT (message_id) DO NOTHING`,
+    ["in", msg.from, msg.contactName, msg.text, msg.messageId, msg.timestamp],
+  );
 });
 
-// ─── Baileys connection management ────────────────────────────────────────────
-
-router.get("/status", requireAdmin, (_req, res): void => {
-  res.json(getStatus());
-});
-
-router.post("/connect", requireAdmin, async (_req, res): Promise<void> => {
+export async function webhookIncoming(req: Request & { rawBody?: string }, res: Response): Promise<void> {
+  res.sendStatus(200);
   try {
-    await connectBaileys();
-    res.json({ ok: true, ...getStatus() });
+    const signature = req.headers["x-hub-signature-256"] as string | undefined;
+    await processWebhookEvent(req.body, req.rawBody, signature);
   } catch (err) {
-    logger.error({ err }, "baileys connect");
-    res.status(500).json({ error: String(err) });
+    logger.error({ err }, "[whatsapp webhook] processing error");
+  }
+}
+
+// ─── POST /send ──────────────────────────────────────────────────────────────
+
+router.post("/send", async (req, res) => {
+  const { to, message, contactName } = req.body as { to?: string; message?: string; contactName?: string };
+  if (!to || !message) return res.status(400).json({ error: "to و message مطلوبان" });
+  if (!isWhatsAppConfigured)
+    return res.status(503).json({
+      error: "WhatsApp Business API غير مهيأ — أضف WHATSAPP_PHONE_NUMBER_ID و WHATSAPP_ACCESS_TOKEN في متغيرات البيئة",
+      notConfigured: true,
+    });
+
+  const phone = to.replace(/\D/g, "");
+  try {
+    const msgId = await sendWhatsAppText(phone, message);
+    await pool.query(
+      `INSERT INTO whatsapp_messages (direction, phone, contact_name, message_text, message_id, sent_at)
+       VALUES ($1,$2,$3,$4,$5,NOW()) ON CONFLICT (message_id) DO NOTHING`,
+      ["out", phone, contactName ?? phone, message, msgId]
+    );
+    return res.json({ success: true, messageId: msgId });
+  } catch (err: any) {
+    return res.status(500).json({ error: "فشل إرسال الرسالة", details: err.message });
   }
 });
 
-router.post("/reconnect", requireAdmin, async (_req, res): Promise<void> => {
-  try {
-    await reconnectBaileys();
-    res.json({ ok: true, ...getStatus() });
-  } catch (err) {
-    logger.error({ err }, "baileys reconnect");
-    res.status(500).json({ error: String(err) });
-  }
-});
+// ─── GET /conversations ───────────────────────────────────────────────────────
 
-router.post("/disconnect", requireAdmin, async (_req, res): Promise<void> => {
-  try {
-    await disconnectBaileys();
-    res.json({ ok: true });
-  } catch (err) {
-    logger.error({ err }, "baileys disconnect");
-    res.status(500).json({ error: String(err) });
-  }
-});
-
-// ─── Chat list ────────────────────────────────────────────────────────────────
-
-router.get("/conversations", requireAdmin, async (_req, res): Promise<void> => {
+router.get("/conversations", async (_req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT DISTINCT ON (phone)
-        phone,
-        contact_name,
-        message_text  AS last_message,
-        direction     AS last_direction,
-        sent_at       AS last_at,
+        phone, contact_name,
+        message_text AS last_message,
+        direction    AS last_direction,
+        sent_at      AS last_at,
         (SELECT COUNT(*) FROM whatsapp_messages w2
-         WHERE w2.phone = w1.phone AND w2.direction = 'in' AND w2.read_at IS NULL
-        ) AS unread_count
+         WHERE w2.phone = w1.phone AND w2.direction = 'in' AND w2.read_at IS NULL) AS unread_count
       FROM whatsapp_messages w1
       ORDER BY phone, sent_at DESC
     `);
-    rows.sort((a: { last_at: string }, b: { last_at: string }) =>
-      new Date(b.last_at).getTime() - new Date(a.last_at).getTime()
-    );
+    rows.sort((a: any, b: any) => new Date(b.last_at).getTime() - new Date(a.last_at).getTime());
     res.json(rows);
-  } catch (err) {
-    logger.error({ err }, "whatsapp/conversations");
-    res.status(500).json({ error: "فشل جلب المحادثات" });
+  } catch (err: any) {
+    res.status(500).json({ error: "فشل جلب المحادثات", details: err.message });
   }
 });
 
-// ─── Messages for a phone ─────────────────────────────────────────────────────
+// ─── GET /messages/:phone ─────────────────────────────────────────────────────
 
-router.get("/messages/:phone", requireAdmin, async (req, res): Promise<void> => {
-  const phone = req.params.phone.replace(/\D/g, "");
+router.get("/messages/:phone", async (req, res) => {
   try {
+    const phone = req.params.phone.replace(/\D/g, "");
     await pool.query(
       `UPDATE whatsapp_messages SET read_at = NOW() WHERE phone = $1 AND direction = 'in' AND read_at IS NULL`,
       [phone]
@@ -118,70 +113,9 @@ router.get("/messages/:phone", requireAdmin, async (req, res): Promise<void> => 
       [phone]
     );
     res.json(rows);
-  } catch (err) {
-    logger.error({ err, phone }, "whatsapp/messages/:phone");
-    res.status(500).json({ error: "فشل جلب الرسائل" });
+  } catch (err: any) {
+    res.status(500).json({ error: "فشل جلب الرسائل", details: err.message });
   }
 });
-
-// ─── Send message via Baileys ─────────────────────────────────────────────────
-
-router.post("/send", requireAdmin, async (req: Request, res: Response): Promise<void> => {
-  const { to, message, contactName } = req.body as {
-    to?: string; message?: string; contactName?: string;
-  };
-  if (!to || !message?.trim()) {
-    res.status(400).json({ error: "to و message مطلوبان" });
-    return;
-  }
-  try {
-    const msgId = await sendBaileysText(to, message.trim(), contactName);
-    res.json({ success: true, messageId: msgId });
-  } catch (err) {
-    logger.error({ err, to }, "whatsapp/send");
-    res.status(500).json({
-      error: err instanceof Error ? err.message : "فشل إرسال الرسالة",
-    });
-  }
-});
-
-// ─── Meta webhook — kept for RFQ supplier flow ───────────────────────────────
-
-export function webhookVerify(req: Request, res: Response): void {
-  const mode = req.query["hub.mode"];
-  const verify_token = req.query["hub.verify_token"];
-  const challenge = req.query["hub.challenge"];
-  if (
-    mode !== "subscribe" ||
-    typeof verify_token !== "string" ||
-    typeof challenge !== "string"
-  ) {
-    res.sendStatus(403);
-    return;
-  }
-  const result = verifyWebhook({
-    "hub.mode": mode,
-    "hub.verify_token": verify_token,
-    "hub.challenge": challenge,
-  });
-  if (typeof result === "string") {
-    res.status(200).send(result);
-  } else {
-    res.sendStatus(403);
-  }
-}
-
-export async function webhookIncoming(
-  req: Request & { rawBody?: string },
-  res: Response
-): Promise<void> {
-  res.sendStatus(200);
-  try {
-    const signature = req.headers["x-hub-signature-256"] as string | undefined;
-    await processWebhookEvent(req.body, req.rawBody, signature);
-  } catch (err) {
-    logger.error({ err }, "[whatsapp webhook] processing error");
-  }
-}
 
 export default router;

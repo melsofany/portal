@@ -47,6 +47,3 @@ Thumbs.db
 # Replit
 .cache/
 .local/
-
-# Baileys WhatsApp session credentials
-.baileys-auth/
