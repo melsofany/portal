@@ -220,6 +220,9 @@ importers:
       pino-http:
         specifier: ^10.5.0
         version: 10.5.0
+      whatsapp-api-js:
+        specifier: ^6.2.1
+        version: 6.2.1
     devDependencies:
       '@types/cookie-parser':
         specifier: ^1.4.10
@@ -3246,6 +3249,10 @@ packages:
       yaml:
         optional: true
 
+  whatsapp-api-js@6.2.1:
+    resolution: {integrity: sha512-nK/7ku9Cg1PrQkb5vm7QJqpzZFi1CCMMsW1IDB2rOVOceQlr4KO53GtQ//xT4Z6XasS96arW1b0RxvIMxjvDog==}
+    engines: {node: '>=16'}
+
   which@2.0.2:
     resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
     engines: {node: '>= 8'}
@@ -5887,6 +5894,8 @@ snapshots:
       lightningcss: 1.32.0
       tsx: 4.22.4
       yaml: 2.9.0
+
+  whatsapp-api-js@6.2.1: {}
 
   which@2.0.2:
     dependencies:
