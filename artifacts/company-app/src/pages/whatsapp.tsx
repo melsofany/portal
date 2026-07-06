@@ -191,15 +191,29 @@ export default function WhatsAppPage() {
     es.onmessage = (e) => {
       try {
         const ev = JSON.parse(e.data) as Record<string, unknown>;
-        if (ev.type === "status" || ev.type === "qr") {
+
+        if (ev.type === "qr") {
+          // Backend broadcasts status:"qr" + qrDataUrl; force status to "qr"
+          setWaStatus(prev => ({
+            ...prev,
+            status: "qr",
+            qrDataUrl: (ev.qrDataUrl as string) ?? null,
+          }));
+          setShowQr(true);
+          return;
+        }
+
+        if (ev.type === "status") {
+          const newStatus = (ev.status as ConnStatus) ?? "disconnected";
           setWaStatus({
-            status:      (ev.status as ConnStatus) ?? "disconnected",
-            qrDataUrl:   (ev.qrDataUrl as string) ?? null,
+            status:      newStatus,
+            qrDataUrl:   newStatus === "qr" ? (ev.qrDataUrl as string ?? null) : null,
             phoneNumber: (ev.phoneNumber as string) ?? null,
           });
-          if (ev.type === "qr") setShowQr(true);
-          if (ev.status === "connected") { setShowQr(false); loadConversations(); }
+          if (newStatus === "connected") { setShowQr(false); loadConversations(); }
+          return;
         }
+
         if (ev.type === "message") {
           loadConversations();
           if (activePhone && ev.phone === activePhone) loadMessages(activePhone);

@@ -158,7 +158,8 @@ async function _doConnect(): Promise<void> {
           color: { dark: "#111b21", light: "#ffffff" },
         });
       } catch { state.qrDataUrl = null; }
-      broadcast({ type: "qr", qrDataUrl: state.qrDataUrl });
+      // Include status:"qr" so the frontend can set state correctly from one field
+      broadcast({ type: "qr", status: "qr", qrDataUrl: state.qrDataUrl });
       logger.info("Baileys QR generated");
     }
 
