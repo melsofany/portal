@@ -1573,6 +1573,7 @@ export default function SupplierQuotationsPage() {
   const [analysisRfq, setAnalysisRfq] = useState<{ id: number; rfqNo: string } | null>(null);
   const [copiedToken, setCopiedToken] = useState("");
   const [listSearch, setListSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [addingSupplierForRfq, setAddingSupplierForRfq] = useState<Rfq | null>(null);
   const queryClient = useQueryClient();
 
@@ -1582,9 +1583,11 @@ export default function SupplierQuotationsPage() {
   });
 
   const filteredRfqs = React.useMemo(() => {
+    let list = rfqs;
+    if (statusFilter !== "all") list = list.filter(r => r.status === statusFilter);
     const q = listSearch.trim().toLowerCase();
-    if (!q) return rfqs;
-    return rfqs.filter(rfq => {
+    if (!q) return list;
+    return list.filter(rfq => {
       if (rfq.rfqNo?.toLowerCase().includes(q)) return true;
       if (rfq.sourceQuotationNo?.toLowerCase().includes(q)) return true;
       if (rfq.customerOrderNo?.toLowerCase().includes(q)) return true;
@@ -1593,7 +1596,7 @@ export default function SupplierQuotationsPage() {
       if (rfq.items?.some(i => i.partNo?.toLowerCase().includes(q))) return true;
       return false;
     });
-  }, [rfqs, listSearch]);
+  }, [rfqs, listSearch, statusFilter]);
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => authFetch(`${API_BASE}/api/supplier-quotations/${id}`, { method: 'DELETE' }),
@@ -1605,306 +1608,443 @@ export default function SupplierQuotationsPage() {
     deleteMutation.mutate(id);
   }
 
+  // KPI counters for header
+  const openCount      = rfqs.filter(r => r.status === "مفتوح").length;
+  const completedCount = rfqs.filter(r => r.status === "مكتمل").length;
+  const withReplyCount = rfqs.filter(r => r.suppliers?.some(s => s.responseStatus === "submitted")).length;
+
+  const STATUS_TABS = [
+    { key: "all",    label: "الكل",    count: rfqs.length },
+    { key: "مفتوح", label: "مفتوح",   count: openCount },
+    { key: "مكتمل", label: "مكتمل",   count: completedCount },
+    { key: "ملغي",  label: "ملغي",    count: rfqs.filter(r => r.status === "ملغي").length },
+  ];
+
   return (
     <AppLayout>
-      <div className="space-y-4" dir="rtl">
+      {/* Full-bleed wrapper — overrides AppLayout padding */}
+      <div dir="rtl" className="-mx-6 -mt-6 flex flex-col min-h-[calc(100vh-64px)]">
 
-        {/* ── Page Toolbar ── SAP style */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-200">
-          <div>
-            <h1 className="text-base font-bold text-[#0f2240]">طلبات تسعير الموردين</h1>
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              {rfqs.length > 0 ? `${rfqs.length} طلب تسعير` : "قائمة طلبات التسعير المرسلة للموردين"}
-            </p>
+        {/* ══════════ SAP Object Header ══════════ */}
+        <div className="bg-[#0f2240] px-6 py-4 border-b-2 border-[#162d4a] shrink-0">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div>
+              <p className="text-blue-300/80 text-[10px] font-medium tracking-widest uppercase mb-1">
+                المشتريات › طلبات التسعير
+              </p>
+              <h1 className="text-white text-xl font-bold leading-tight">طلبات تسعير الموردين</h1>
+              {/* KPI row */}
+              <div className="flex items-center gap-4 mt-3">
+                {[
+                  { val: rfqs.length,     label: "إجمالي",        cls: "bg-white/10 text-white border-white/20" },
+                  { val: openCount,       label: "مفتوح",          cls: "bg-amber-400/20 text-amber-200 border-amber-400/30" },
+                  { val: withReplyCount,  label: "باستجابة",       cls: "bg-emerald-400/20 text-emerald-200 border-emerald-400/30" },
+                  { val: completedCount,  label: "مكتمل",          cls: "bg-slate-400/20 text-slate-300 border-slate-400/30" },
+                ].map((kpi, i) => (
+                  <div key={i} className={
+                    `flex items-center gap-1.5 px-3 py-1 rounded-sm border text-[11px] font-semibold ${kpi.cls}`}>
+                    <span className="text-base font-bold">{kpi.val}</span>
+                    <span className="opacity-80">{kpi.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <button onClick={() => setWizardOpen(true)}
+              className="flex items-center gap-2 px-5 py-2.5 bg-white text-[#0f2240] text-xs font-bold rounded-sm hover:bg-blue-50 transition-colors shadow-sm shrink-0 self-start mt-1">
+              <Send className="h-3.5 w-3.5" />
+              إرسال طلب تسعير جديد
+            </button>
           </div>
-          <button onClick={() => setWizardOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-sm font-semibold rounded-md transition-colors shadow-sm">
-            <Send className="h-3.5 w-3.5" /> إرسال طلب تسعير جديد
-          </button>
         </div>
 
-        {/* ── Search bar ── */}
-        <div className="relative">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-          <input
-            type="text"
-            value={listSearch}
-            onChange={e => setListSearch(e.target.value)}
-            placeholder="بحث: رقم الطلب، طلب تسعير العميل، اسم المورد، رقم القطعة..."
-            className="w-full rounded-lg border border-slate-300 bg-white pr-9 pl-9 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-200"
-            dir="rtl"
-          />
-          {listSearch && (
-            <button onClick={() => setListSearch("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-              <X className="h-3.5 w-3.5" />
-            </button>
+        {/* ══════════ Filter Bar ══════════ */}
+        <div className="bg-white border-b border-slate-200 px-6 py-2.5 flex flex-col sm:flex-row gap-3 items-start sm:items-center shrink-0">
+          {/* Status tabs */}
+          <div className="flex items-stretch gap-0 border border-slate-200 overflow-hidden shrink-0" style={{ borderRadius: '2px' }}>
+            {STATUS_TABS.map((tab) => (
+              <button key={tab.key} onClick={() => setStatusFilter(tab.key)}
+                className={`px-3 py-1.5 text-[11px] font-semibold border-l last:border-l-0 border-slate-200 transition-colors whitespace-nowrap
+                  ${statusFilter === tab.key
+                    ? "bg-[#0f2240] text-white"
+                    : "bg-white text-slate-600 hover:bg-slate-50"}`}>
+                {tab.label}
+                {tab.count > 0 && (
+                  <span className={`mr-1 text-[10px] ${statusFilter === tab.key ? "text-blue-300" : "text-slate-400"}`}>
+                    ({tab.count})
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Search */}
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              value={listSearch}
+              onChange={e => setListSearch(e.target.value)}
+              placeholder="بحث: رقم الطلب، المورد، رقم القطعة..."
+              className="w-full border border-slate-200 bg-[#fafbfc] pr-8 pl-8 py-1.5 text-xs focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100 focus:bg-white"
+              style={{ borderRadius: '2px' }}
+              dir="rtl"
+            />
+            {listSearch && (
+              <button onClick={() => setListSearch("")} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          {(listSearch || statusFilter !== "all") && (
+            <div className="flex items-center gap-2 text-[11px] text-slate-500 shrink-0">
+              <span>{filteredRfqs.length} من {rfqs.length} سجل</span>
+              <button onClick={() => { setListSearch(""); setStatusFilter("all"); }}
+                className="text-blue-600 hover:underline text-[10px]">مسح</button>
+            </div>
           )}
         </div>
 
-        {/* ── Results info ── */}
-        {listSearch && (
-          <p className="text-[11px] text-slate-400">{filteredRfqs.length} نتيجة من أصل {rfqs.length} طلب</p>
-        )}
+        {/* ══════════ Content Area ══════════ */}
+        <div className="flex-1 bg-[#f0f4f8] px-6 py-4">
 
-        {/* ── Loading ── */}
-        {isLoading && (
-          <div className="flex items-center justify-center py-16 gap-2 text-slate-400">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span className="text-xs">جاري التحميل...</span>
-          </div>
-        )}
-
-        {/* ── Empty state ── */}
-        {!isLoading && rfqs.length === 0 && (
-          <div className="border border-slate-200 bg-white rounded-sm p-14 text-center">
-            <div className="h-12 w-12 mx-auto mb-4 rounded bg-slate-100 flex items-center justify-center">
-              <Send className="h-6 w-6 text-slate-300" />
+          {/* Loading */}
+          {isLoading && (
+            <div className="flex items-center justify-center py-20 gap-2 text-slate-400">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-xs">جاري التحميل...</span>
             </div>
-            <p className="text-slate-600 font-semibold text-sm">لا توجد طلبات تسعير حتى الآن</p>
-            <p className="text-slate-400 text-xs mt-1 mb-4">اضغط على الزر أعلاه لإرسال طلب تسعير جديد للموردين</p>
-            <button onClick={() => setWizardOpen(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-xs font-semibold rounded-sm transition-colors">
-              <Send className="h-3.5 w-3.5" /> إرسال طلب تسعير
-            </button>
-          </div>
-        )}
+          )}
 
-        {!isLoading && rfqs.length > 0 && filteredRfqs.length === 0 && (
-          <div className="border border-slate-200 bg-white rounded-sm p-10 text-center">
-            <Search className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-            <p className="text-slate-500 text-xs font-medium">لا توجد نتائج مطابقة</p>
-            <p className="text-slate-400 text-[11px] mt-1">جرّب مصطلح بحث مختلف</p>
-          </div>
-        )}
+          {/* Empty — no data at all */}
+          {!isLoading && rfqs.length === 0 && (
+            <div className="bg-white border border-slate-200 flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-16 h-16 rounded-sm bg-[#0f2240]/5 flex items-center justify-center mb-4">
+                <Send className="h-7 w-7 text-[#0f2240]/25" />
+              </div>
+              <p className="text-slate-700 font-semibold text-sm">لا توجد طلبات تسعير بعد</p>
+              <p className="text-slate-400 text-xs mt-1 mb-5">ابدأ بإرسال أول طلب تسعير للموردين</p>
+              <button onClick={() => setWizardOpen(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-xs font-semibold transition-colors"
+                style={{ borderRadius: '2px' }}>
+                <Send className="h-3.5 w-3.5" /> إرسال طلب تسعير
+              </button>
+            </div>
+          )}
 
-        {/* ── Main Table ── */}
-        {!isLoading && filteredRfqs.length > 0 && (
-          <div className="border border-slate-200 rounded-sm overflow-hidden bg-white">
-            <table className="w-full text-right text-xs">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-300">
-                  <TH className="w-8 text-center">▼</TH>
-                  <TH>رقم الطلب</TH>
-                  <TH>طلب تسعير العميل</TH>
-                  <TH>رقم أمر الشراء</TH>
-                  <TH className="text-center">التاريخ</TH>
-                  <TH className="text-center">البنود</TH>
-                  <TH className="text-center">الموردون</TH>
-                  <TH className="text-center">الاستجابة</TH>
-                  <TH>الحالة</TH>
-                  <TH className="text-center w-28">إجراءات</TH>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRfqs.map((rfq, rowIdx) => {
-                  const isExpanded = expandedId === rfq.id;
-                  const submittedCount = rfq.suppliers.filter(s => s.responseStatus === "submitted").length;
-                  const responseRate = rfq.suppliers.length > 0
-                    ? Math.round((submittedCount / rfq.suppliers.length) * 100)
-                    : 0;
+          {/* Empty — filter yields nothing */}
+          {!isLoading && rfqs.length > 0 && filteredRfqs.length === 0 && (
+            <div className="bg-white border border-slate-200 flex flex-col items-center justify-center py-14 text-center">
+              <Search className="h-8 w-8 text-slate-300 mb-3" />
+              <p className="text-slate-500 text-sm font-medium">لا توجد نتائج مطابقة</p>
+              <button onClick={() => { setListSearch(""); setStatusFilter("all"); }}
+                className="mt-3 text-xs text-blue-600 hover:underline">مسح التصفية</button>
+            </div>
+          )}
 
-                  return (
-                    <React.Fragment key={rfq.id}>
-                      {/* Main row */}
-                      <tr className={`border-b border-slate-100 cursor-pointer transition-colors
-                        ${isExpanded ? "bg-blue-50" : rowIdx % 2 === 0 ? "bg-white hover:bg-[#f0f4f8]" : "bg-slate-50/40 hover:bg-[#f0f4f8]"}`}
-                        onClick={() => setExpandedId(isExpanded ? null : rfq.id)}>
+          {/* ══════════ Main Table ══════════ */}
+          {!isLoading && filteredRfqs.length > 0 && (
+            <div>
+              {/* Table toolbar */}
+              <div className="flex items-center justify-between bg-white border border-b-0 border-slate-200 px-4 py-2 border-t-2 border-t-[#1e3a5f]">
+                <p className="text-[11px] font-semibold text-slate-600">
+                  {filteredRfqs.length} سجل
+                  {(listSearch || statusFilter !== "all") && (
+                    <span className="text-slate-400 font-normal"> (مصفى من {rfqs.length})</span>
+                  )}
+                </p>
+                <span className="text-[10px] text-slate-400">مرتب حسب: التاريخ (الأحدث)</span>
+              </div>
 
-                        <td className="px-2 py-2.5 text-center text-slate-400">
-                          {isExpanded
-                            ? <ChevronUp className="h-3.5 w-3.5 inline text-[#1e3a5f]" />
-                            : <ChevronDown className="h-3.5 w-3.5 inline" />}
-                        </td>
-                        <td className="px-3 py-2.5 font-bold text-[#1e3a5f] font-mono">{rfq.rfqNo}</td>
-                        <td className="px-3 py-2.5 font-mono text-slate-600">{rfq.sourceQuotationNo || "—"}</td>
-                        <td className="px-3 py-2.5 text-slate-500">{rfq.customerOrderNo || "—"}</td>
-                        <td className="px-3 py-2.5 text-center font-mono text-slate-500">{rfq.requestDate}</td>
-                        <td className="px-3 py-2.5 text-center font-semibold text-slate-700">{rfq.items.length}</td>
-                        <td className="px-3 py-2.5 text-center font-semibold text-slate-700">{rfq.suppliers.length}</td>
-                        <td className="px-3 py-2.5 text-center">
-                          {rfq.suppliers.length > 0 ? (
-                            <div className="flex items-center justify-center gap-1.5">
-                              <div className="w-14 h-1.5 bg-slate-200 rounded overflow-hidden">
-                                <div className={`h-full rounded ${responseRate >= 80 ? "bg-emerald-500" : responseRate >= 40 ? "bg-amber-400" : "bg-slate-300"}`}
-                                  style={{ width: `${responseRate}%` }} />
-                              </div>
-                              <span className={`text-[10px] font-semibold ${submittedCount > 0 ? "text-emerald-600" : "text-slate-400"}`}>
-                                {submittedCount}/{rfq.suppliers.length}
-                              </span>
-                            </div>
-                          ) : <span className="text-slate-300">—</span>}
-                        </td>
-                        <td className="px-3 py-2.5"><StatusBadge status={rfq.status} /></td>
-                        <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
-                          <div className="flex items-center justify-center gap-1">
-                            {submittedCount > 0 && (
-                              <button
-                                onClick={() => setAnalysisRfq({ id: rfq.id, rfqNo: rfq.rfqNo })}
-                                title="تحليل ومقارنة الأسعار"
-                                className="flex items-center gap-0.5 px-1.5 py-1 border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-sm text-[10px] font-semibold transition-colors">
-                                <BarChart3 className="h-3 w-3" /> تحليل
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleDelete(rfq.id)}
-                              title="حذف"
-                              className="p-1 border border-red-200 bg-white hover:bg-red-50 text-red-400 hover:text-red-600 rounded-sm transition-colors">
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+              <div className="border border-slate-200 overflow-hidden bg-white">
+                <table className="w-full text-right text-xs">
+                  <thead>
+                    <tr className="border-b-2 border-slate-300">
+                      {[
+                        { label: "", cls: "w-8 text-center bg-[#eef1f5]" },
+                        { label: "رقم الطلب", cls: "bg-[#eef1f5]" },
+                        { label: "طلب العميل", cls: "bg-[#eef1f5]" },
+                        { label: "أمر الشراء", cls: "bg-[#eef1f5]" },
+                        { label: "التاريخ", cls: "bg-[#eef1f5] text-center" },
+                        { label: "البنود", cls: "bg-[#eef1f5] text-center w-16" },
+                        { label: "الموردون", cls: "bg-[#eef1f5] text-center w-20" },
+                        { label: "الاستجابة", cls: "bg-[#eef1f5] text-center w-28" },
+                        { label: "الحالة", cls: "bg-[#eef1f5] w-20" },
+                        { label: "إجراءات", cls: "bg-[#eef1f5] text-center w-28" },
+                      ].map((col, i) => (
+                        <th key={i}
+                          className={`px-3 py-2.5 text-[10px] font-bold text-slate-600 whitespace-nowrap border-l border-slate-200 last:border-l-0 tracking-wide uppercase ${col.cls}`}>
+                          {col.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredRfqs.map((rfq, rowIdx) => {
+                      const isExpanded = expandedId === rfq.id;
+                      const submittedCount = rfq.suppliers.filter(s => s.responseStatus === "submitted").length;
+                      const responseRate = rfq.suppliers.length > 0
+                        ? Math.round((submittedCount / rfq.suppliers.length) * 100) : 0;
 
-                      {/* Expanded detail rows */}
-                      {isExpanded && (
-                        <tr className="border-b border-slate-200">
-                          <td colSpan={10} className="p-0">
-                            <div className="bg-[#f8fafc] border-t-2 border-[#1e3a5f]/30 px-5 py-4 space-y-4">
+                      return (
+                        <React.Fragment key={rfq.id}>
+                          {/* ── Main Row ── */}
+                          <tr
+                            className={`cursor-pointer transition-colors select-none
+                              ${isExpanded
+                                ? "bg-[#1e3a5f]/5 border-r-4 border-r-[#1e3a5f]"
+                                : rowIdx % 2 === 0
+                                  ? "bg-white hover:bg-[#f8f9fc]"
+                                  : "bg-[#fafbfc] hover:bg-[#f5f7fa]"}`}
+                            onClick={() => setExpandedId(isExpanded ? null : rfq.id)}>
 
-                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                {/* Items sub-table */}
-                                <div>
-                                  <div className="flex items-center justify-between mb-2">
-                                    <p className="text-[11px] font-semibold text-slate-600 border-r-2 border-[#1e3a5f] pr-2">البنود ({rfq.items.length})</p>
+                            <td className="px-2 py-2.5 text-center text-slate-400 border-l border-slate-100">
+                              {isExpanded
+                                ? <ChevronUp className="h-3.5 w-3.5 inline text-[#1e3a5f]" />
+                                : <ChevronDown className="h-3.5 w-3.5 inline text-slate-400" />}
+                            </td>
+                            <td className="px-3 py-2.5 border-l border-slate-100">
+                              <span className="font-bold text-[#0f2240] font-mono text-[11px] tracking-tight">{rfq.rfqNo}</span>
+                            </td>
+                            <td className="px-3 py-2.5 font-mono text-slate-500 text-[11px] border-l border-slate-100">{rfq.sourceQuotationNo || <span className="text-slate-300">—</span>}</td>
+                            <td className="px-3 py-2.5 text-slate-500 text-[11px] border-l border-slate-100">{rfq.customerOrderNo || <span className="text-slate-300">—</span>}</td>
+                            <td className="px-3 py-2.5 text-center font-mono text-slate-500 text-[11px] border-l border-slate-100">{rfq.requestDate}</td>
+                            <td className="px-3 py-2.5 text-center border-l border-slate-100">
+                              <span className="inline-flex items-center justify-center w-6 h-6 bg-slate-100 text-slate-700 font-bold text-[10px]"
+                                style={{ borderRadius: '2px' }}>{rfq.items.length}</span>
+                            </td>
+                            <td className="px-3 py-2.5 text-center border-l border-slate-100">
+                              <span className="inline-flex items-center justify-center w-6 h-6 bg-slate-100 text-slate-700 font-bold text-[10px]"
+                                style={{ borderRadius: '2px' }}>{rfq.suppliers.length}</span>
+                            </td>
+                            <td className="px-3 py-2.5 border-l border-slate-100">
+                              {rfq.suppliers.length > 0 ? (
+                                <div className="flex items-center gap-1.5">
+                                  <div className="flex-1 h-1.5 bg-slate-200 overflow-hidden" style={{ borderRadius: '1px' }}>
+                                    <div
+                                      className={`h-full transition-all ${responseRate >= 80 ? "bg-emerald-500" : responseRate >= 40 ? "bg-amber-400" : "bg-rose-400"}`}
+                                      style={{ width: `${responseRate}%` }} />
                                   </div>
-                                  <div className="border border-slate-200 rounded-sm overflow-hidden">
-                                    <table className="w-full text-[11px] text-right">
-                                      <thead className="bg-slate-50 border-b border-slate-300">
-                                        <tr>
-                                          <TH className="w-7">#</TH>
-                                          <TH>الوصف</TH>
-                                          <TH className="text-center">الكمية</TH>
-                                          <TH className="text-center">الوحدة</TH>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {rfq.items.map((item, idx) => (
-                                          <tr key={item.id} className={`border-b border-slate-100 last:border-0 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
-                                            <td className="px-2 py-1.5 text-slate-400">{idx + 1}</td>
-                                            <td className="px-2 py-1.5 font-medium">
-                                              {item.description}
-                                              {item.partNo && <span className="text-slate-400 mr-1.5 text-[10px] font-mono">{item.partNo}</span>}
-                                            </td>
-                                            <td className="px-2 py-1.5 text-center font-mono">{fmtQty(item.quantity)}</td>
-                                            <td className="px-2 py-1.5 text-center text-slate-500">{item.unit || "—"}</td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
+                                  <span className={`text-[10px] font-bold shrink-0 ${submittedCount > 0 ? "text-emerald-600" : "text-slate-400"}`}>
+                                    {submittedCount}/{rfq.suppliers.length}
+                                  </span>
                                 </div>
+                              ) : <span className="text-slate-300 text-[11px]">—</span>}
+                            </td>
+                            <td className="px-3 py-2.5 border-l border-slate-100">
+                              <StatusBadge status={rfq.status} />
+                            </td>
+                            <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
+                              <div className="flex items-center justify-center gap-1">
+                                {submittedCount > 0 && (
+                                  <button
+                                    onClick={() => setAnalysisRfq({ id: rfq.id, rfqNo: rfq.rfqNo })}
+                                    title="تحليل الأسعار"
+                                    className="flex items-center gap-0.5 px-1.5 py-1 border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 text-[10px] font-semibold transition-colors"
+                                    style={{ borderRadius: '2px' }}>
+                                    <BarChart3 className="h-3 w-3" /> تحليل
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleDelete(rfq.id)}
+                                  title="حذف"
+                                  className="p-1 border border-red-200 bg-white hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
+                                  style={{ borderRadius: '2px' }}>
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
 
-                                {/* Suppliers sub-table */}
-                                <div>
-                                  <div className="flex items-center justify-between mb-2">
-                                    <p className="text-[11px] font-semibold text-slate-600 border-r-2 border-[#1e3a5f] pr-2">الموردون ({rfq.suppliers.length})</p>
-                                    <div className="flex items-center gap-2">
-                                      <button onClick={() => setAddingSupplierForRfq(rfq)}
-                                        className="flex items-center gap-1 px-2 py-0.5 border border-[#1e3a5f] bg-white hover:bg-blue-50 text-[#1e3a5f] text-[10px] font-semibold rounded-sm transition-colors">
-                                        <UserPlus className="h-3 w-3" /> إضافة مورد
-                                      </button>
-                                      {submittedCount > 0 && (
-                                        <button onClick={() => setAnalysisRfq({ id: rfq.id, rfqNo: rfq.rfqNo })}
-                                          className="flex items-center gap-1 px-2 py-0.5 border border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-700 text-[10px] font-semibold rounded-sm transition-colors">
-                                          <BarChart3 className="h-3 w-3" /> تحليل الأسعار
-                                        </button>
+                          {/* ── Expanded Detail Panel ── */}
+                          {isExpanded && (
+                            <tr>
+                              <td colSpan={10} className="p-0 border-b border-slate-200">
+                                <div className="bg-white border-r-4 border-r-[#1e3a5f]">
+
+                                  {/* Panel Header */}
+                                  <div className="flex items-center justify-between px-5 py-2.5 bg-[#eef1f5] border-b border-slate-200">
+                                    <div className="flex items-center gap-3">
+                                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#0f2240]">
+                                        <FileText className="h-3.5 w-3.5 text-[#1e3a5f]" />
+                                        تفاصيل الطلب:
+                                        <span className="font-mono ml-1">{rfq.rfqNo}</span>
+                                      </div>
+                                      {rfq.deadline && (
+                                        <span className="text-[10px] text-slate-500 border border-slate-300 bg-white px-2 py-0.5" style={{ borderRadius: '2px' }}>
+                                          الموعد النهائي: <span className="font-mono">{rfq.deadline}</span>
+                                        </span>
                                       )}
                                     </div>
+                                    <div className="flex items-center gap-2">
+                                      {submittedCount > 0 && (
+                                        <button onClick={() => setAnalysisRfq({ id: rfq.id, rfqNo: rfq.rfqNo })}
+                                          className="flex items-center gap-1.5 px-3 py-1.5 border border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-700 text-[10px] font-bold transition-colors"
+                                          style={{ borderRadius: '2px' }}>
+                                          <BarChart3 className="h-3.5 w-3.5" /> تحليل ومقارنة الأسعار
+                                        </button>
+                                      )}
+                                      <button onClick={() => setAddingSupplierForRfq(rfq)}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-[10px] font-bold transition-colors"
+                                        style={{ borderRadius: '2px' }}>
+                                        <UserPlus className="h-3.5 w-3.5" /> إضافة مورد
+                                      </button>
+                                    </div>
                                   </div>
-                                  <div className="border border-slate-200 rounded-sm overflow-hidden">
-                                    <table className="w-full text-[11px] text-right">
-                                      <thead className="bg-slate-50 border-b border-slate-300">
-                                        <tr>
-                                          <TH>المورد</TH>
-                                          <TH className="text-center">الحالة</TH>
-                                          <TH className="text-center">الرؤية</TH>
-                                          <TH className="text-center w-24">إرسال</TH>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {rfq.suppliers.map((sup, idx) => (
-                                          <React.Fragment key={sup.supplierId}>
-                                            <tr className={`border-b border-slate-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
-                                              <td className="px-2 py-1.5 font-medium text-slate-800">{sup.companyName}</td>
-                                              <td className="px-2 py-1.5 text-center">
-                                                <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-sm text-[10px] font-semibold border
-                                                  ${sup.responseStatus === "submitted"
-                                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                                    : "bg-amber-50 text-amber-700 border-amber-200"}`}>
-                                                  {sup.responseStatus === "submitted"
-                                                    ? <><Check className="h-2.5 w-2.5" /> استجاب</>
-                                                    : <><Clock className="h-2.5 w-2.5" /> انتظار</>}
-                                                </span>
-                                              </td>
-                                              <td className="px-2 py-1.5 text-center">
-                                                <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-sm text-[10px] font-semibold border
-                                                  ${sup.firstOpenedAt
-                                                    ? "bg-sky-50 text-sky-700 border-sky-200"
-                                                    : "bg-slate-50 text-slate-400 border-slate-200"}`}>
-                                                  {sup.firstOpenedAt ? <><Eye className="h-2.5 w-2.5" /> فتح</> : <><EyeOff className="h-2.5 w-2.5" /> لم يفتح</>}
-                                                </span>
-                                              </td>
-                                              <td className="px-2 py-1.5 text-center">
-                                                <div className="flex items-center justify-center gap-1">
-                                                  <button title="PDF"
-                                                    onClick={() => downloadRfqPdf(rfq, sup)}
-                                                    className="p-1 border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 rounded-sm transition-colors">
-                                                    <FileText className="h-3 w-3" />
-                                                  </button>
-                                                  <button title="واتساب"
-                                                    onClick={() => sendWhatsApp(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup.token)}
-                                                    className="p-1 border border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-600 rounded-sm transition-colors">
-                                                    <MessageSquare className="h-3 w-3" />
-                                                  </button>
-                                                  <button title="إيميل"
-                                                    onClick={() => openEmail(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup.token)}
-                                                    className="p-1 border border-orange-200 bg-white hover:bg-orange-50 text-orange-500 rounded-sm transition-colors">
-                                                    <Mail className="h-3 w-3" />
-                                                  </button>
-                                                </div>
-                                              </td>
-                                            </tr>
-                                            {/* Token link row */}
-                                            {sup.token && (
-                                              <tr className={`border-b border-slate-100 ${idx % 2 === 0 ? "bg-[#fafbfc]" : "bg-slate-50/60"}`}>
-                                                <td colSpan={4} className="px-2 py-1.5">
-                                                  <div className="flex items-center gap-2">
-                                                    <LinkIcon className="h-3 w-3 shrink-0 text-[#1e3a5f]" />
-                                                    <span className="text-[10px] text-slate-400 font-mono truncate flex-1">{getRfqLink(sup.token)}</span>
-                                                    <button onClick={() => copyTokenLink(sup.token, setCopiedToken)}
-                                                      className="flex items-center gap-0.5 px-1.5 py-0.5 border border-slate-200 bg-white hover:border-[#1e3a5f] hover:text-[#1e3a5f] text-[10px] text-slate-500 rounded-sm shrink-0 transition-colors">
-                                                      {copiedToken === sup.token ? <><Check className="h-2.5 w-2.5 text-emerald-600" /> تم</> : <><Copy className="h-2.5 w-2.5" /> نسخ الرابط</>}
-                                                    </button>
-                                                  </div>
-                                                </td>
-                                              </tr>
-                                            )}
-                                          </React.Fragment>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </div>
-                              </div>
 
-                              {/* Notes */}
-                              {rfq.notes && (
-                                <div className="border border-amber-200 bg-amber-50 rounded-sm px-3 py-2 text-[11px] text-amber-800">
-                                  <span className="font-semibold">ملاحظات: </span>{rfq.notes}
+                                  {/* Panel Body */}
+                                  <div className="px-5 py-4">
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+                                      {/* ── Items Sub-table ── */}
+                                      <div>
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <div className="w-1 h-4 bg-[#1e3a5f]" />
+                                          <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wide">
+                                            البنود المطلوبة
+                                            <span className="mr-1.5 text-[10px] font-normal text-slate-400 normal-case tracking-normal">({rfq.items.length} بند)</span>
+                                          </p>
+                                        </div>
+                                        <div className="border border-slate-200 overflow-hidden">
+                                          <table className="w-full text-[11px] text-right">
+                                            <thead>
+                                              <tr className="bg-[#eef1f5] border-b border-slate-200">
+                                                <th className="px-2 py-1.5 text-[10px] font-bold text-slate-500 w-7 text-center border-l border-slate-200">#</th>
+                                                <th className="px-2 py-1.5 text-[10px] font-bold text-slate-500 border-l border-slate-200">الوصف</th>
+                                                <th className="px-2 py-1.5 text-[10px] font-bold text-slate-500 text-center border-l border-slate-200 w-16">الكمية</th>
+                                                <th className="px-2 py-1.5 text-[10px] font-bold text-slate-500 text-center w-14">الوحدة</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                              {rfq.items.map((item, idx) => (
+                                                <tr key={item.id} className={idx % 2 === 0 ? "bg-white" : "bg-[#fafbfc]"}>
+                                                  <td className="px-2 py-1.5 text-slate-400 text-center border-l border-slate-100">{idx + 1}</td>
+                                                  <td className="px-2 py-1.5 font-medium border-l border-slate-100">
+                                                    {item.description}
+                                                    {item.partNo && <div className="text-[10px] text-slate-400 font-mono mt-0.5">{item.partNo}</div>}
+                                                  </td>
+                                                  <td className="px-2 py-1.5 text-center font-mono border-l border-slate-100">{fmtQty(item.quantity)}</td>
+                                                  <td className="px-2 py-1.5 text-center text-slate-500">{item.unit || "—"}</td>
+                                                </tr>
+                                              ))}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      </div>
+
+                                      {/* ── Suppliers Sub-table ── */}
+                                      <div>
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <div className="w-1 h-4 bg-emerald-500" />
+                                          <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wide">
+                                            الموردون
+                                            <span className="mr-1.5 text-[10px] font-normal text-slate-400 normal-case tracking-normal">({rfq.suppliers.length} مورد)</span>
+                                          </p>
+                                        </div>
+                                        <div className="border border-slate-200 overflow-hidden">
+                                          <table className="w-full text-[11px] text-right">
+                                            <thead>
+                                              <tr className="bg-[#eef1f5] border-b border-slate-200">
+                                                <th className="px-2 py-1.5 text-[10px] font-bold text-slate-500 border-l border-slate-200">المورد</th>
+                                                <th className="px-2 py-1.5 text-[10px] font-bold text-slate-500 text-center border-l border-slate-200 w-20">الحالة</th>
+                                                <th className="px-2 py-1.5 text-[10px] font-bold text-slate-500 text-center border-l border-slate-200 w-20">الرؤية</th>
+                                                <th className="px-2 py-1.5 text-[10px] font-bold text-slate-500 text-center w-24">إرسال</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                              {rfq.suppliers.map((sup, idx) => (
+                                                <React.Fragment key={sup.supplierId}>
+                                                  <tr className={idx % 2 === 0 ? "bg-white" : "bg-[#fafbfc]"}>
+                                                    <td className="px-2 py-1.5 font-semibold text-slate-800 border-l border-slate-100">{sup.companyName}</td>
+                                                    <td className="px-2 py-1.5 text-center border-l border-slate-100">
+                                                      <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold border
+                                                        ${sup.responseStatus === "submitted"
+                                                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                          : "bg-amber-50 text-amber-700 border-amber-200"}`}
+                                                        style={{ borderRadius: '2px' }}>
+                                                        {sup.responseStatus === "submitted"
+                                                          ? <><Check className="h-2.5 w-2.5" /> استجاب</>
+                                                          : <><Clock className="h-2.5 w-2.5" /> انتظار</>}
+                                                      </span>
+                                                    </td>
+                                                    <td className="px-2 py-1.5 text-center border-l border-slate-100">
+                                                      <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold border
+                                                        ${sup.firstOpenedAt
+                                                          ? "bg-sky-50 text-sky-700 border-sky-200"
+                                                          : "bg-slate-50 text-slate-400 border-slate-200"}`}
+                                                        style={{ borderRadius: '2px' }}>
+                                                        {sup.firstOpenedAt
+                                                          ? <><Eye className="h-2.5 w-2.5" /> فتح</>
+                                                          : <><EyeOff className="h-2.5 w-2.5" /> لم يفتح</>}
+                                                      </span>
+                                                    </td>
+                                                    <td className="px-2 py-1.5 text-center" onClick={e => e.stopPropagation()}>
+                                                      <div className="flex items-center justify-center gap-1">
+                                                        <button title="PDF" onClick={() => downloadRfqPdf(rfq, sup)}
+                                                          className="p-1 border border-slate-200 bg-white hover:bg-slate-100 text-slate-500 transition-colors"
+                                                          style={{ borderRadius: '2px' }}>
+                                                          <FileText className="h-3 w-3" />
+                                                        </button>
+                                                        <button title="واتساب" onClick={() => sendWhatsApp(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup.token)}
+                                                          className="p-1 border border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-600 transition-colors"
+                                                          style={{ borderRadius: '2px' }}>
+                                                          <MessageSquare className="h-3 w-3" />
+                                                        </button>
+                                                        <button title="إيميل" onClick={() => openEmail(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup.token)}
+                                                          className="p-1 border border-orange-200 bg-white hover:bg-orange-50 text-orange-500 transition-colors"
+                                                          style={{ borderRadius: '2px' }}>
+                                                          <Mail className="h-3 w-3" />
+                                                        </button>
+                                                      </div>
+                                                    </td>
+                                                  </tr>
+                                                  {/* Token link row */}
+                                                  {sup.token && (
+                                                    <tr className="border-b border-slate-100 bg-[#f8f9fc]" onClick={e => e.stopPropagation()}>
+                                                      <td colSpan={4} className="px-3 py-1.5">
+                                                        <div className="flex items-center gap-2">
+                                                          <LinkIcon className="h-3 w-3 shrink-0 text-[#1e3a5f]" />
+                                                          <span className="text-[10px] text-slate-400 font-mono truncate flex-1">{getRfqLink(sup.token)}</span>
+                                                          <button onClick={() => copyTokenLink(sup.token, setCopiedToken)}
+                                                            className="flex items-center gap-0.5 px-2 py-0.5 border border-slate-200 bg-white hover:border-[#1e3a5f] hover:text-[#1e3a5f] text-[10px] text-slate-500 transition-colors"
+                                                            style={{ borderRadius: '2px' }}>
+                                                            {copiedToken === sup.token
+                                                              ? <><Check className="h-2.5 w-2.5 text-emerald-600" /> تم النسخ</>
+                                                              : <><Copy className="h-2.5 w-2.5" /> نسخ الرابط</>}
+                                                          </button>
+                                                        </div>
+                                                      </td>
+                                                    </tr>
+                                                  )}
+                                                </React.Fragment>
+                                              ))}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Notes */}
+                                    {rfq.notes && (
+                                      <div className="mt-4 border-r-4 border-amber-400 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                                        <span className="font-bold">ملاحظات: </span>{rfq.notes}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>{/* end content area */}
+      </div>{/* end full-bleed wrapper */}
 
       {addingSupplierForRfq && (
         <AddSupplierModal rfq={addingSupplierForRfq} apiBase={API_BASE}
