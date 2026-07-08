@@ -130,6 +130,7 @@ import { Router } from "express";
         });
       }
 
+      res.setHeader("Cache-Control", "no-store");
       res.json({
         found: true, rfqNo: matchedRfq.rfqNo,
         rfqSupplierId: respondedSupplier.id, responseStatus: respondedSupplier.responseStatus,
