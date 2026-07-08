@@ -56,7 +56,7 @@ import { Router } from "express";
       );
       if (!rfqSuppliers.length) return res.json({ found: false, rfqNo: null, items: [] });
 
-      const respondedSupplier = rfqSuppliers.find(s => s.responseStatus === "responded") ?? rfqSuppliers[0];
+      const respondedSupplier = rfqSuppliers.find(s => s.responseStatus === "submitted" || s.responseStatus === "responded") ?? rfqSuppliers[0];
       const matchedRfq = rfqs.find(r => r.id === respondedSupplier.rfqId)!;
 
       const rfqItems = await db.select().from(supplierQuotationItemsTable)
