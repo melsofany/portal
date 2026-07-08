@@ -4,12 +4,13 @@ import React, { useState, useMemo, useEffect } from "react";
   import { Input } from "@/components/ui/input";
   import { Label } from "@/components/ui/label";
   import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-  import { Search, X, Trash2, Loader2, Truck, CheckSquare, Square, Pencil, MessageCircle, Mail, Tag, Plus } from "lucide-react";
+  import { Search, X, Trash2, Loader2, Truck, CheckSquare, Square, Pencil, MessageCircle, Mail, Tag, Plus, UserCheck } from "lucide-react";
 
   const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
   const STATUSES = ["مفتوح", "مكتمل", "ملغي"];
 
   interface Supplier { id: number; companyName: string; phone: string; whatsapp: string; email: string; }
+  interface Employee { id: number; fullName: string; phone: string; jobTitle: string; }
   interface COItem { id: number; description: string; partNo: string; unit: string; quantity: string; unitPrice: string; }
   interface FoundCO { id: number; orderNo: string; customerName: string; customerPoNo: string; items: COItem[]; }
   interface OrderItem {
@@ -19,6 +20,8 @@ import React, { useState, useMemo, useEffect } from "react";
   interface Order {
     id: number; orderNo: string; supplierName: string; supplierEmail: string; supplierWhatsapp: string;
     orderDate: string; status: string; totalAmount: string; itemCount: number; notes: string;
+    supplierId?: number;
+    representativeName?: string; representativePhone?: string;
   }
   interface RfqPriceItem { rfqItemId: number; description: string; partNo: string; unit: string; unitPrice: string; }
   interface RfqPriceResult { found: boolean; rfqNo: string | null; rfqSupplierId: number | null; responseStatus: string; items: RfqPriceItem[]; }
@@ -30,7 +33,11 @@ import React, { useState, useMemo, useEffect } from "react";
     return "bg-slate-100 text-slate-600";
   }
 
-  function buildPreviewMsg(orderNo: string, orderDate: string, supplierName: string, rfqNo: string, items: OrderItem[], notes: string): string {
+  function buildPreviewMsg(
+    orderNo: string, orderDate: string, supplierName: string, rfqNo: string,
+    items: OrderItem[], notes: string,
+    representativeName?: string, representativePhone?: string
+  ): string {
     const lines: string[] = [];
     lines.push("طلب توريد رقم: " + orderNo);
     lines.push("التاريخ: " + orderDate);
@@ -49,6 +56,11 @@ import React, { useState, useMemo, useEffect } from "react";
     });
     const total = items.reduce((s, it) => s + (parseFloat(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0), 0);
     if (total > 0) { lines.push(""); lines.push("الإجمالي: " + total.toFixed(3)); }
+    if (representativeName) {
+      lines.push("");
+      lines.push("مندوب الاستلام: " + representativeName);
+      if (representativePhone) lines.push("هاتف المندوب: " + representativePhone);
+    }
     if (notes) { lines.push(""); lines.push("ملاحظات: " + notes); }
     return lines.join("\n");
   }
@@ -70,6 +82,7 @@ import React, { useState, useMemo, useEffect } from "react";
     const [isLoading, setIsLoading] = useState(true);
     const [listSearch, setListSearch] = useState("");
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    const [employees, setEmployees] = useState<Employee[]>([]);
 
     const [open, setOpen] = useState(false);
     const [editId, setEditId] = useState<number | null>(null);
@@ -78,6 +91,7 @@ import React, { useState, useMemo, useEffect } from "react";
     const [orderDate, setOrderDate] = useState(new Date().toISOString().split("T")[0]);
     const [notes, setNotes] = useState("");
     const [orderStatus, setOrderStatus] = useState("مفتوح");
+    const [representativeId, setRepresentativeId] = useState<number | "">("");
 
     // CO search
     const [searchTerm, setSearchTerm] = useState("");
@@ -103,7 +117,7 @@ import React, { useState, useMemo, useEffect } from "react";
     const [sendingWa, setSendingWa] = useState(false);
     const [sendResult, setSendResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
-    useEffect(() => { fetchOrders(); fetchSuppliers(); }, []);
+    useEffect(() => { fetchOrders(); fetchSuppliers(); fetchEmployees(); }, []);
 
     async function fetchOrders() {
       setIsLoading(true);
@@ -122,6 +136,14 @@ import React, { useState, useMemo, useEffect } from "react";
       } catch {}
     }
 
+    async function fetchEmployees() {
+      try {
+        const res = await fetch(API_BASE + "/api/employees", { credentials: "include" });
+        const data = await res.json();
+        setEmployees(Array.isArray(data) ? data : (data.employees ?? []));
+      } catch {}
+    }
+
     async function fetchRfqPrices(sid: number | "", co: FoundCO | null) {
       if (!sid || !co) { setRfqResult(null); return; }
       setRfqLoading(true);
@@ -137,7 +159,17 @@ import React, { useState, useMemo, useEffect } from "react";
             const updated = { ...prev };
             co.items.forEach(coItem => {
               const price = matchRfqPrice(coItem, data.items);
-              if (price) updated[coItem.id] = { ...updated[coItem.id], unitPrice: price };
+              // فقط نضع السعر إذا كان من تسعير المورد — لا نستخدم سعر العميل
+              updated[coItem.id] = { ...updated[coItem.id], unitPrice: price };
+            });
+            return updated;
+          });
+        } else {
+          // لا يوجد تسعير من المورد — نترك الحقل فارغاً
+          setSelectedItems(prev => {
+            const updated = { ...prev };
+            co.items.forEach(coItem => {
+              updated[coItem.id] = { ...updated[coItem.id], unitPrice: "" };
             });
             return updated;
           });
@@ -157,7 +189,7 @@ import React, { useState, useMemo, useEffect } from "react";
 
     function resetDialog() {
       setEditId(null); setSupplierId(""); setOrderDate(new Date().toISOString().split("T")[0]);
-      setNotes(""); setOrderStatus("مفتوح");
+      setNotes(""); setOrderStatus("مفتوح"); setRepresentativeId("");
       setSearchTerm(""); setFoundCO(null); setSelectedItems({});
       setOrderItems([]); setSaveError(""); setFormErrors({}); setRfqResult(null);
     }
@@ -172,6 +204,7 @@ import React, { useState, useMemo, useEffect } from "react";
         setSupplierId(data.supplierId ?? "");
         setOrderDate(data.orderDate ?? new Date().toISOString().split("T")[0]);
         setNotes(data.notes ?? ""); setOrderStatus(data.status ?? "مفتوح");
+        setRepresentativeId(data.representativeId ?? "");
         setOrderItems((data.items ?? []).map((it: any, idx: number) => ({
           customerOrderId: it.customerOrderId ?? null, customerOrderNo: it.customerOrderNo ?? "",
           customerOrderItemId: it.customerOrderItemId ?? null, description: it.description ?? "",
@@ -194,11 +227,12 @@ import React, { useState, useMemo, useEffect } from "react";
         if (!Array.isArray(data) || data.length === 0) { setSearchError("لم يتم العثور على أمر شراء بهذا الرقم"); return; }
         const co = data[0];
         setFoundCO(co);
+        // نبدأ بالأسعار فارغة — الأسعار تأتي فقط من تسعير المورد
         const init: Record<number, { quantity: string; unitPrice: string; selected: boolean }> = {};
         (co.items as COItem[]).forEach(it => {
           init[it.id] = {
             quantity: String(it.quantity || ""),
-            unitPrice: it.unitPrice && parseFloat(it.unitPrice) > 0 ? parseFloat(it.unitPrice).toFixed(3) : "",
+            unitPrice: "",  // لا نملأ بسعر العميل — ينتظر سعر المورد من التسعير
             selected: false,
           };
         });
@@ -240,6 +274,7 @@ import React, { useState, useMemo, useEffect } from "react";
     const selectedCount = Object.values(selectedItems).filter(s => s.selected).length;
     const isEditing = editId !== null;
     const selectedSup = suppliers.find(s => s.id === Number(supplierId));
+    const selectedRep = employees.find(e => e.id === Number(representativeId));
 
     async function handleSave() {
       const errs: Record<string, string> = {};
@@ -254,6 +289,7 @@ import React, { useState, useMemo, useEffect } from "react";
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             supplierId: supplierId || null, orderDate, notes, status: orderStatus,
+            representativeId: representativeId || null,
             items: orderItems.map((it, idx) => ({
               customerOrderId: it.customerOrderId, customerOrderNo: it.customerOrderNo,
               customerOrderItemId: it.customerOrderItemId, description: it.description,
@@ -300,6 +336,8 @@ import React, { useState, useMemo, useEffect } from "react";
             if (rfqData.found) setSendRfqNo(rfqData.rfqNo ?? "");
           }
         }
+        // Set representative info from fetched order data
+        setSendOrder({ ...order, representativeName: data.representativeName, representativePhone: data.representativePhone });
       } catch {} finally { setLoadingSendItems(false); }
     }
 
@@ -321,7 +359,10 @@ import React, { useState, useMemo, useEffect } from "react";
     function doEmail() {
       if (!sendOrder?.supplierEmail) { alert("لا يوجد بريد إلكتروني لهذا المورد"); return; }
       const subject = "طلب توريد " + sendOrder.orderNo;
-      const body = buildPreviewMsg(sendOrder.orderNo, sendOrder.orderDate, sendOrder.supplierName, sendRfqNo, sendItems, sendOrder.notes);
+      const body = buildPreviewMsg(
+        sendOrder.orderNo, sendOrder.orderDate, sendOrder.supplierName, sendRfqNo,
+        sendItems, sendOrder.notes, sendOrder.representativeName, sendOrder.representativePhone
+      );
       window.open("mailto:" + sendOrder.supplierEmail + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body), "_blank");
     }
 
@@ -428,6 +469,30 @@ import React, { useState, useMemo, useEffect } from "react";
                     </div>
                   </div>
 
+                  {/* مندوب الاستلام */}
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-2">
+                    <p className="text-sm font-semibold text-amber-800 flex items-center gap-2">
+                      <UserCheck className="h-4 w-4" /> مندوب الاستلام
+                    </p>
+                    <select value={representativeId}
+                      onChange={e => setRepresentativeId(e.target.value ? Number(e.target.value) : "")}
+                      className="w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-200">
+                      <option value="">اختر المندوب...</option>
+                      {employees.filter(e => e).map(emp => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.fullName}{emp.jobTitle ? " — " + emp.jobTitle : ""}
+                        </option>
+                      ))}
+                    </select>
+                    {selectedRep && (
+                      <p className="text-xs text-amber-700 flex items-center gap-1">
+                        <span>📞</span> {selectedRep.phone || "لا يوجد رقم هاتف"}
+                        <span className="text-amber-400 mx-1">|</span>
+                        <span className="text-amber-600">سيتم إرسال بياناته للمورد مع أمر الشراء</span>
+                      </p>
+                    )}
+                  </div>
+
                   <div>
                     <Label>ملاحظات</Label>
                     <textarea value={notes} onChange={e => setNotes(e.target.value)}
@@ -465,18 +530,23 @@ import React, { useState, useMemo, useEffect } from "react";
 
                     {rfqLoading && (
                       <div className="flex items-center gap-2 text-amber-600 text-sm bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">
-                        <Loader2 className="animate-spin h-4 w-4" /> جاري جلب أسعار طلب التسعير...
+                        <Loader2 className="animate-spin h-4 w-4" /> جاري جلب أسعار المورد من طلب التسعير...
                       </div>
                     )}
                     {!rfqLoading && rfqResult?.found && (
                       <div className="flex items-center gap-2 text-green-700 text-sm bg-green-50 rounded-lg px-3 py-2 border border-green-200">
                         <Tag className="h-4 w-4 text-green-600 shrink-0" />
-                        تم جلب الأسعار من طلب التسعير: <strong className="font-mono">{rfqResult.rfqNo}</strong>
+                        تم جلب أسعار المورد من طلب التسعير: <strong className="font-mono">{rfqResult.rfqNo}</strong>
                       </div>
                     )}
                     {!rfqLoading && rfqResult && !rfqResult.found && supplierId && foundCO && (
                       <div className="text-amber-600 text-xs bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">
-                        لا يوجد طلب تسعير مرتبط — يمكنك إدخال الأسعار يدوياً
+                        لا يوجد طلب تسعير مرتبط بهذا المورد — أدخل الأسعار يدوياً
+                      </div>
+                    )}
+                    {!rfqLoading && !supplierId && foundCO && (
+                      <div className="text-slate-500 text-xs bg-slate-100 rounded-lg px-3 py-2 border border-slate-200">
+                        اختر المورد أولاً لجلب أسعاره من طلب التسعير
                       </div>
                     )}
 
@@ -515,13 +585,14 @@ import React, { useState, useMemo, useEffect } from "react";
                                     </div>
                                     <div>
                                       <label className="text-xs text-slate-500 flex items-center gap-1">
-                                        سعر الوحدة
+                                        سعر الوحدة (من تسعير المورد)
                                         {rfqResult?.found && sel.unitPrice && parseFloat(sel.unitPrice) > 0 && (
-                                          <span className="text-green-600 font-medium">(من التسعير ✓)</span>
+                                          <span className="text-green-600 font-medium">✓</span>
                                         )}
                                       </label>
                                       <input type="number" value={sel.unitPrice}
                                         onChange={e => updateSelField(it.id, "unitPrice", e.target.value)}
+                                        placeholder="سعر المورد..."
                                         className={"w-full rounded border px-2 py-1 text-sm mt-0.5 focus:outline-none " +
                                           (rfqResult?.found && sel.unitPrice && parseFloat(sel.unitPrice) > 0
                                             ? "border-green-400 bg-green-50 focus:border-green-500 text-green-800"
@@ -557,7 +628,7 @@ import React, { useState, useMemo, useEffect } from "react";
                               <th className="px-3 py-2 text-slate-500 font-medium">البيان</th>
                               <th className="px-3 py-2 text-slate-500 font-medium">أمر العميل</th>
                               <th className="px-3 py-2 text-slate-500 font-medium w-24">الكمية</th>
-                              <th className="px-3 py-2 text-slate-500 font-medium w-28">سعر الوحدة</th>
+                              <th className="px-3 py-2 text-slate-500 font-medium w-32">سعر المورد</th>
                               <th className="px-3 py-2 text-slate-500 font-medium w-24">الإجمالي</th>
                               <th className="px-2 py-2 w-8"></th>
                             </tr>
@@ -578,6 +649,7 @@ import React, { useState, useMemo, useEffect } from "react";
                                 <td className="px-3 py-2">
                                   <input type="number" value={it.unitPrice}
                                     onChange={e => updateItemField(it.key, "unitPrice", e.target.value)}
+                                    placeholder="سعر المورد"
                                     className="w-full rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:border-blue-400" />
                                 </td>
                                 <td className="px-3 py-2 text-slate-700 font-medium text-xs">
@@ -629,6 +701,14 @@ import React, { useState, useMemo, useEffect } from "react";
                     {sendRfqNo && <p><span className="text-slate-500">رقم طلب التسعير: </span><strong className="font-mono text-amber-700">{sendRfqNo}</strong></p>}
                     <p><span className="text-slate-500">واتسآب: </span>{sendOrder.supplierWhatsapp || "—"}</p>
                     <p><span className="text-slate-500">إيميل: </span>{sendOrder.supplierEmail || "—"}</p>
+                    {sendOrder.representativeName && (
+                      <p className="flex items-center gap-1 text-amber-700">
+                        <UserCheck className="h-3.5 w-3.5" />
+                        <span className="text-slate-500">مندوب الاستلام: </span>
+                        <strong>{sendOrder.representativeName}</strong>
+                        {sendOrder.representativePhone && <span className="text-slate-500"> · {sendOrder.representativePhone}</span>}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <p className="text-xs font-medium text-slate-600 mb-1">معاينة الرسالة:</p>
@@ -636,7 +716,10 @@ import React, { useState, useMemo, useEffect } from "react";
                       <div className="flex justify-center py-4"><Loader2 className="animate-spin h-5 w-5 text-slate-400" /></div>
                     ) : (
                       <pre className="text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-3 whitespace-pre-wrap max-h-48 overflow-y-auto font-sans">
-                        {buildPreviewMsg(sendOrder.orderNo, sendOrder.orderDate, sendOrder.supplierName, sendRfqNo, sendItems, sendOrder.notes)}
+                        {buildPreviewMsg(
+                          sendOrder.orderNo, sendOrder.orderDate, sendOrder.supplierName, sendRfqNo,
+                          sendItems, sendOrder.notes, sendOrder.representativeName, sendOrder.representativePhone
+                        )}
                       </pre>
                     )}
                   </div>
@@ -661,4 +744,3 @@ import React, { useState, useMemo, useEffect } from "react";
       </AppLayout>
     );
   }
-  

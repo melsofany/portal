@@ -13,6 +13,9 @@ import { pgTable, text, serial, integer, timestamp, numeric } from "drizzle-orm/
       notes: text("notes").default(""),
       status: text("status").notNull().default("مفتوح"),
       totalAmount: numeric("total_amount", { precision: 14, scale: 3 }).default("0"),
+      representativeId: integer("representative_id"),
+      representativeName: text("representative_name").default(""),
+      representativePhone: text("representative_phone").default(""),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
     });

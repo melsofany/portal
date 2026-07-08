@@ -10,6 +10,7 @@ import { Router } from "express";
     supplierQuotationItemsTable,
     supplierQuotationSuppliersTable,
     supplierQuotationItemPricesTable,
+    employeesTable,
   } from "@workspace/db/schema";
   import { eq, desc, and, inArray, or, ilike } from "drizzle-orm";
 
@@ -108,7 +109,7 @@ import { Router } from "express";
   });
 
   async function upsertOrder(body: any, orderId?: number) {
-    const { supplierId, orderDate, notes, status, items } = body;
+    const { supplierId, orderDate, notes, status, items, representativeId } = body;
     if (!orderDate) throw { status: 400, error: "التاريخ مطلوب" };
     if (!Array.isArray(items) || items.length === 0) throw { status: 400, error: "يجب إضافة بند واحد على الأقل" };
 
@@ -116,6 +117,13 @@ import { Router } from "express";
     if (supplierId) {
       const [sup] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, Number(supplierId)));
       if (sup) { supplierName = sup.companyName ?? ""; supplierEmail = sup.email ?? ""; supplierWhatsapp = sup.whatsapp ?? sup.phone ?? ""; }
+    }
+
+    let representativeName = "", representativePhone = "";
+    const repId = representativeId ? Number(representativeId) : null;
+    if (repId) {
+      const [emp] = await db.select().from(employeesTable).where(eq(employeesTable.id, repId));
+      if (emp) { representativeName = emp.fullName ?? ""; representativePhone = emp.phone ?? ""; }
     }
 
     const totalAmount = (items as any[]).reduce((s: number, it: any) =>
@@ -136,9 +144,13 @@ import { Router } from "express";
 
     if (orderId) {
       const [updated] = await db.update(supplierOrdersTable)
-        .set({ supplierId: supplierId ? Number(supplierId) : null, supplierName, supplierEmail, supplierWhatsapp,
-               orderDate: orderDate.trim(), notes: notes?.trim() ?? "", status: status ?? "مفتوح",
-               totalAmount: String(totalAmount), updatedAt: new Date() })
+        .set({
+          supplierId: supplierId ? Number(supplierId) : null, supplierName, supplierEmail, supplierWhatsapp,
+          orderDate: orderDate.trim(), notes: notes?.trim() ?? "", status: status ?? "مفتوح",
+          totalAmount: String(totalAmount),
+          representativeId: repId, representativeName, representativePhone,
+          updatedAt: new Date(),
+        })
         .where(eq(supplierOrdersTable.id, orderId)).returning();
       if (!updated) throw { status: 404, error: "الطلب غير موجود" };
       await db.delete(supplierOrderItemsTable).where(eq(supplierOrderItemsTable.orderId, orderId));
@@ -147,8 +159,11 @@ import { Router } from "express";
     } else {
       const orderNo = generateOrderNo();
       const [order] = await db.insert(supplierOrdersTable)
-        .values({ orderNo, supplierId: supplierId ? Number(supplierId) : null, supplierName, supplierEmail, supplierWhatsapp,
-                  orderDate: orderDate.trim(), notes: notes?.trim() ?? "", status: "مفتوح", totalAmount: String(totalAmount) })
+        .values({
+          orderNo, supplierId: supplierId ? Number(supplierId) : null, supplierName, supplierEmail, supplierWhatsapp,
+          orderDate: orderDate.trim(), notes: notes?.trim() ?? "", status: "مفتوح", totalAmount: String(totalAmount),
+          representativeId: repId, representativeName, representativePhone,
+        })
         .returning();
       await db.insert(supplierOrderItemsTable).values(itemRows.map(r => ({ ...r, orderId: order.id })));
       return { ...order, itemCount: itemRows.length };
@@ -227,6 +242,11 @@ import { Router } from "express";
       });
       const total = items.reduce((s, it) => s + (parseFloat(String(it.quantity)) || 0) * (parseFloat(String(it.unitPrice)) || 0), 0);
       if (total > 0) { lines.push(""); lines.push("الإجمالي: " + total.toFixed(3)); }
+      if (order.representativeName) {
+        lines.push("");
+        lines.push("مندوب الاستلام: " + order.representativeName);
+        if (order.representativePhone) lines.push("هاتف المندوب: " + order.representativePhone);
+      }
       if (order.notes) { lines.push(""); lines.push("ملاحظات: " + order.notes); }
 
       const waRes = await fetch("https://graph.facebook.com/v21.0/" + phoneNumberId + "/messages", {
@@ -248,4 +268,3 @@ import { Router } from "express";
   });
 
   export default router;
-  
