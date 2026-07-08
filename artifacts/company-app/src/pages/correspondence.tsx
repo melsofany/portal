@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import AppLayout from "@/components/AppLayout";
 import {
   Plus, Search, Pencil, Trash2, X, Loader2, FileText,
@@ -102,7 +102,7 @@ export default function CorrespondencePage() {
   const [deleting, setDeleting] = useState(false);
 
   // Load docs on mount
-  useState(() => {
+  useEffect(() => {
     (async () => {
       try {
         const res = await authFetch(`${API_BASE}/api/correspondence`);
@@ -114,7 +114,7 @@ export default function CorrespondencePage() {
         setLoading(false);
       }
     })();
-  });
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
