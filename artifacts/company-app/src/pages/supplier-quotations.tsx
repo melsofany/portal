@@ -1568,9 +1568,286 @@ function AddSupplierModal({ rfq, apiBase, onClose, onAdded }: {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+
+// ─── RfqDetailDrawer ─────────────────────────────────────────────────────────
+// SAP Fiori Master-Detail side panel — opens when a row is selected in the list
+
+interface RfqDetailDrawerProps {
+  rfq: Rfq;
+  copiedToken: string;
+  setCopiedToken: (t: string) => void;
+  onClose: () => void;
+  onAddSupplier: () => void;
+  onAnalysis: () => void;
+  onDelete: () => void;
+}
+
+function RfqDetailDrawer({
+  rfq, copiedToken, setCopiedToken,
+  onClose, onAddSupplier, onAnalysis, onDelete,
+}: RfqDetailDrawerProps) {
+  const submittedCount = rfq.suppliers.filter(s => s.responseStatus === "submitted").length;
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/20 z-40 transition-opacity"
+        onClick={onClose}
+      />
+
+      {/* Drawer panel */}
+      <div
+        dir="rtl"
+        className="fixed top-0 left-0 h-full w-full sm:w-[520px] bg-white z-50 flex flex-col shadow-2xl border-r-0 border-l border-l-slate-200"
+        style={{ animation: 'slideInLeft 0.2s ease-out' }}
+      >
+        {/* ── Drawer Header ── */}
+        <div className="bg-[#0f2240] px-5 py-4 shrink-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-blue-300/80 text-[10px] tracking-widest uppercase font-medium mb-1">
+                تفاصيل طلب التسعير
+              </p>
+              <h2 className="text-white text-base font-bold font-mono leading-tight truncate">
+                {rfq.rfqNo}
+              </h2>
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <StatusBadge status={rfq.status} />
+                <span className="text-blue-300 text-[10px]">
+                  {rfq.requestDate}
+                </span>
+                {rfq.deadline && (
+                  <span className="text-[10px] bg-amber-500/20 text-amber-200 border border-amber-400/30 px-2 py-0.5"
+                    style={{ borderRadius: '2px' }}>
+                    الموعد: {rfq.deadline}
+                  </span>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-slate-400 hover:text-white transition-colors p-1 mt-1 shrink-0"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* ── Meta info bar ── */}
+        <div className="bg-[#eef1f5] border-b border-slate-200 px-5 py-2.5 shrink-0">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+            {rfq.sourceQuotationNo && (
+              <>
+                <span className="text-slate-500">طلب تسعير العميل</span>
+                <span className="font-mono font-semibold text-[#0f2240]">{rfq.sourceQuotationNo}</span>
+              </>
+            )}
+            {rfq.customerOrderNo && (
+              <>
+                <span className="text-slate-500">رقم أمر الشراء</span>
+                <span className="font-mono text-slate-700">{rfq.customerOrderNo}</span>
+              </>
+            )}
+            <span className="text-slate-500">البنود</span>
+            <span className="font-semibold text-slate-700">{rfq.items.length} بند</span>
+            <span className="text-slate-500">الموردون</span>
+            <span className="font-semibold text-slate-700">
+              {rfq.suppliers.length} مورد
+              {submittedCount > 0 && (
+                <span className="mr-2 text-emerald-600 font-normal">({submittedCount} استجاب)</span>
+              )}
+            </span>
+          </div>
+        </div>
+
+        {/* ── Scrollable Body ── */}
+        <div className="flex-1 overflow-y-auto bg-[#f8f9fc]">
+
+          {/* ── Section: Items ── */}
+          <div className="border-b border-slate-200">
+            <div className="flex items-center gap-2 px-5 py-2.5 bg-white border-b border-slate-100">
+              <div className="w-1 h-5 bg-[#1e3a5f]" />
+              <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wide">البنود المطلوبة</span>
+              <span className="text-[10px] text-slate-400 font-normal normal-case tracking-normal mr-1">
+                ({rfq.items.length})
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11px] text-right">
+                <thead>
+                  <tr className="bg-[#eef1f5] border-b border-slate-200">
+                    <th className="px-3 py-2 text-[10px] font-bold text-slate-500 w-8 text-center border-l border-slate-200">#</th>
+                    <th className="px-3 py-2 text-[10px] font-bold text-slate-500 border-l border-slate-200">الوصف</th>
+                    <th className="px-3 py-2 text-[10px] font-bold text-slate-500 text-center border-l border-slate-200 w-16">الكمية</th>
+                    <th className="px-3 py-2 text-[10px] font-bold text-slate-500 text-center w-14">الوحدة</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {rfq.items.map((item, idx) => (
+                    <tr key={item.id} className={idx % 2 === 0 ? "bg-white" : "bg-[#fafbfc]"}>
+                      <td className="px-3 py-2 text-slate-400 text-center border-l border-slate-100">{idx + 1}</td>
+                      <td className="px-3 py-2 border-l border-slate-100">
+                        <div className="font-medium text-slate-800">{item.description}</div>
+                        {item.partNo && (
+                          <div className="text-[10px] text-slate-400 font-mono mt-0.5">{item.partNo}</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-center font-mono border-l border-slate-100">{fmtQty(item.quantity)}</td>
+                      <td className="px-3 py-2 text-center text-slate-500">{item.unit || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ── Section: Suppliers ── */}
+          <div className="border-b border-slate-200">
+            <div className="flex items-center gap-2 px-5 py-2.5 bg-white border-b border-slate-100">
+              <div className="w-1 h-5 bg-emerald-500" />
+              <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wide">الموردون</span>
+              <span className="text-[10px] text-slate-400 font-normal normal-case tracking-normal mr-1">
+                ({rfq.suppliers.length})
+              </span>
+            </div>
+
+            {rfq.suppliers.length === 0 ? (
+              <div className="px-5 py-8 text-center">
+                <UserPlus className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs text-slate-400">لم يُضف أي مورد بعد</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {rfq.suppliers.map((sup) => (
+                  <div key={sup.supplierId} className="bg-white px-5 py-3">
+                    {/* Supplier name + status badges */}
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[12px] font-semibold text-slate-800">{sup.companyName}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold border
+                            ${sup.responseStatus === "submitted"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : "bg-amber-50 text-amber-700 border-amber-200"}`}
+                          style={{ borderRadius: '2px' }}>
+                          {sup.responseStatus === "submitted"
+                            ? <><Check className="h-2.5 w-2.5" /> استجاب</>
+                            : <><Clock className="h-2.5 w-2.5" /> انتظار</>}
+                        </span>
+                        <span
+                          className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold border
+                            ${sup.firstOpenedAt
+                              ? "bg-sky-50 text-sky-700 border-sky-200"
+                              : "bg-slate-50 text-slate-400 border-slate-200"}`}
+                          style={{ borderRadius: '2px' }}>
+                          {sup.firstOpenedAt
+                            ? <><Eye className="h-2.5 w-2.5" /> فتح</>
+                            : <><EyeOff className="h-2.5 w-2.5" /> لم يفتح</>}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Action buttons row */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        title="تحميل PDF"
+                        onClick={() => downloadRfqPdf(rfq, sup)}
+                        className="flex items-center gap-1 px-2.5 py-1 border border-slate-200 bg-[#fafbfc] hover:bg-slate-100 text-slate-600 text-[10px] font-semibold transition-colors"
+                        style={{ borderRadius: '2px' }}>
+                        <FileText className="h-3 w-3" /> PDF
+                      </button>
+                      <button
+                        title="إرسال واتساب"
+                        onClick={() => sendWhatsApp(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup.token)}
+                        className="flex items-center gap-1 px-2.5 py-1 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-semibold transition-colors"
+                        style={{ borderRadius: '2px' }}>
+                        <MessageSquare className="h-3 w-3" /> واتساب
+                      </button>
+                      <button
+                        title="إرسال إيميل"
+                        onClick={() => openEmail(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup.token)}
+                        className="flex items-center gap-1 px-2.5 py-1 border border-orange-200 bg-orange-50 hover:bg-orange-100 text-orange-700 text-[10px] font-semibold transition-colors"
+                        style={{ borderRadius: '2px' }}>
+                        <Mail className="h-3 w-3" /> إيميل
+                      </button>
+                    </div>
+
+                    {/* Token link */}
+                    {sup.token && (
+                      <div className="mt-2 flex items-center gap-2 bg-[#f0f4f8] border border-slate-200 px-3 py-1.5"
+                        style={{ borderRadius: '2px' }}>
+                        <LinkIcon className="h-3 w-3 shrink-0 text-[#1e3a5f]" />
+                        <span className="text-[10px] text-slate-400 font-mono truncate flex-1">
+                          {getRfqLink(sup.token)}
+                        </span>
+                        <button
+                          onClick={() => copyTokenLink(sup.token, setCopiedToken)}
+                          className="flex items-center gap-0.5 px-2 py-0.5 border border-slate-300 bg-white hover:border-[#1e3a5f] hover:text-[#1e3a5f] text-[10px] text-slate-500 transition-colors shrink-0"
+                          style={{ borderRadius: '2px' }}>
+                          {copiedToken === sup.token
+                            ? <><Check className="h-2.5 w-2.5 text-emerald-600" /> تم</>
+                            : <><Copy className="h-2.5 w-2.5" /> نسخ</>}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Section: Notes ── */}
+          {rfq.notes && (
+            <div className="px-5 py-4">
+              <div className="border-r-4 border-amber-400 bg-amber-50 px-4 py-3 text-[11px] text-amber-800">
+                <span className="font-bold block mb-1">ملاحظات:</span>
+                {rfq.notes}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Drawer Footer ── */}
+        <div className="border-t-2 border-slate-200 bg-white px-5 py-3 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onAddSupplier}
+              className="flex items-center gap-1.5 px-3 py-2 bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-[11px] font-bold transition-colors"
+              style={{ borderRadius: '2px' }}>
+              <UserPlus className="h-3.5 w-3.5" /> إضافة مورد
+            </button>
+            {submittedCount > 0 && (
+              <button
+                onClick={onAnalysis}
+                className="flex items-center gap-1.5 px-3 py-2 border border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-700 text-[11px] font-bold transition-colors"
+                style={{ borderRadius: '2px' }}>
+                <BarChart3 className="h-3.5 w-3.5" /> تحليل الأسعار
+              </button>
+            )}
+          </div>
+          <button
+            onClick={onDelete}
+            className="flex items-center gap-1.5 px-3 py-2 border border-red-200 bg-white hover:bg-red-50 text-red-500 hover:text-red-700 text-[11px] font-semibold transition-colors"
+            style={{ borderRadius: '2px' }}>
+            <Trash2 className="h-3.5 w-3.5" /> حذف الطلب
+          </button>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes slideInLeft {
+          from { transform: translateX(-100%); opacity: 0; }
+          to   { transform: translateX(0);     opacity: 1; }
+        }
+      `}</style>
+    </>
+  );
+}
+
 export default function SupplierQuotationsPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [selectedRfq, setSelectedRfq] = useState<Rfq | null>(null);
   const [analysisRfq, setAnalysisRfq] = useState<{ id: number; rfqNo: string } | null>(null);
   const [copiedToken, setCopiedToken] = useState("");
   const [listSearch, setListSearch] = useState("");
@@ -1582,6 +1859,14 @@ export default function SupplierQuotationsPage() {
     queryKey: ["supplier-quotations"],
     queryFn: () => authFetchJson<Rfq[]>(`${API_BASE}/api/supplier-quotations`),
   });
+
+  // Keep selectedRfq in sync when data refreshes
+  React.useEffect(() => {
+    if (selectedRfq) {
+      const fresh = rfqs.find(r => r.id === selectedRfq.id);
+      if (fresh) setSelectedRfq(fresh);
+    }
+  }, [rfqs]);
 
   const filteredRfqs = React.useMemo(() => {
     let list = rfqs;
@@ -1601,7 +1886,10 @@ export default function SupplierQuotationsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => authFetch(`${API_BASE}/api/supplier-quotations/${id}`, { method: 'DELETE' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["supplier-quotations"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["supplier-quotations"] });
+      setSelectedRfq(null);
+    },
   });
 
   function handleDelete(id: number) {
@@ -1609,21 +1897,19 @@ export default function SupplierQuotationsPage() {
     deleteMutation.mutate(id);
   }
 
-  // KPI counters for header
   const openCount      = rfqs.filter(r => r.status === "مفتوح").length;
   const completedCount = rfqs.filter(r => r.status === "مكتمل").length;
   const withReplyCount = rfqs.filter(r => r.suppliers?.some(s => s.responseStatus === "submitted")).length;
 
   const STATUS_TABS = [
-    { key: "all",    label: "الكل",    count: rfqs.length },
-    { key: "مفتوح", label: "مفتوح",   count: openCount },
-    { key: "مكتمل", label: "مكتمل",   count: completedCount },
-    { key: "ملغي",  label: "ملغي",    count: rfqs.filter(r => r.status === "ملغي").length },
+    { key: "all",    label: "الكل",  count: rfqs.length },
+    { key: "مفتوح", label: "مفتوح", count: openCount },
+    { key: "مكتمل", label: "مكتمل", count: completedCount },
+    { key: "ملغي",  label: "ملغي",  count: rfqs.filter(r => r.status === "ملغي").length },
   ];
 
   return (
     <AppLayout>
-      {/* Full-bleed wrapper — overrides AppLayout padding */}
       <div dir="rtl" className="-mx-6 -mt-6 flex flex-col min-h-[calc(100vh-64px)]">
 
         {/* ══════════ SAP Object Header ══════════ */}
@@ -1634,16 +1920,15 @@ export default function SupplierQuotationsPage() {
                 المشتريات › طلبات التسعير
               </p>
               <h1 className="text-white text-xl font-bold leading-tight">طلبات تسعير الموردين</h1>
-              {/* KPI row */}
-              <div className="flex items-center gap-4 mt-3">
+              <div className="flex items-center gap-3 mt-3 flex-wrap">
                 {[
-                  { val: rfqs.length,     label: "إجمالي",        cls: "bg-white/10 text-white border-white/20" },
-                  { val: openCount,       label: "مفتوح",          cls: "bg-amber-400/20 text-amber-200 border-amber-400/30" },
-                  { val: withReplyCount,  label: "باستجابة",       cls: "bg-emerald-400/20 text-emerald-200 border-emerald-400/30" },
-                  { val: completedCount,  label: "مكتمل",          cls: "bg-slate-400/20 text-slate-300 border-slate-400/30" },
+                  { val: rfqs.length,    label: "إجمالي",   cls: "bg-white/10 text-white border-white/20" },
+                  { val: openCount,      label: "مفتوح",    cls: "bg-amber-400/20 text-amber-200 border-amber-400/30" },
+                  { val: withReplyCount, label: "باستجابة", cls: "bg-emerald-400/20 text-emerald-200 border-emerald-400/30" },
+                  { val: completedCount, label: "مكتمل",    cls: "bg-slate-400/20 text-slate-300 border-slate-400/30" },
                 ].map((kpi, i) => (
-                  <div key={i} className={
-                    `flex items-center gap-1.5 px-3 py-1 rounded-sm border text-[11px] font-semibold ${kpi.cls}`}>
+                  <div key={i} className={`flex items-center gap-1.5 px-3 py-1 border text-[11px] font-semibold ${kpi.cls}`}
+                    style={{ borderRadius: '2px' }}>
                     <span className="text-base font-bold">{kpi.val}</span>
                     <span className="opacity-80">{kpi.label}</span>
                   </div>
@@ -1651,7 +1936,8 @@ export default function SupplierQuotationsPage() {
               </div>
             </div>
             <button onClick={() => setWizardOpen(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-white text-[#0f2240] text-xs font-bold rounded-sm hover:bg-blue-50 transition-colors shadow-sm shrink-0 self-start mt-1">
+              className="flex items-center gap-2 px-5 py-2.5 bg-white text-[#0f2240] text-xs font-bold hover:bg-blue-50 transition-colors shadow-sm shrink-0 self-start mt-1"
+              style={{ borderRadius: '2px' }}>
               <Send className="h-3.5 w-3.5" />
               إرسال طلب تسعير جديد
             </button>
@@ -1660,14 +1946,11 @@ export default function SupplierQuotationsPage() {
 
         {/* ══════════ Filter Bar ══════════ */}
         <div className="bg-white border-b border-slate-200 px-6 py-2.5 flex flex-col sm:flex-row gap-3 items-start sm:items-center shrink-0">
-          {/* Status tabs */}
-          <div className="flex items-stretch gap-0 border border-slate-200 overflow-hidden shrink-0" style={{ borderRadius: '2px' }}>
+          <div className="flex items-stretch border border-slate-200 overflow-hidden shrink-0" style={{ borderRadius: '2px' }}>
             {STATUS_TABS.map((tab) => (
               <button key={tab.key} onClick={() => setStatusFilter(tab.key)}
                 className={`px-3 py-1.5 text-[11px] font-semibold border-l last:border-l-0 border-slate-200 transition-colors whitespace-nowrap
-                  ${statusFilter === tab.key
-                    ? "bg-[#0f2240] text-white"
-                    : "bg-white text-slate-600 hover:bg-slate-50"}`}>
+                  ${statusFilter === tab.key ? "bg-[#0f2240] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
                 {tab.label}
                 {tab.count > 0 && (
                   <span className={`mr-1 text-[10px] ${statusFilter === tab.key ? "text-blue-300" : "text-slate-400"}`}>
@@ -1677,26 +1960,18 @@ export default function SupplierQuotationsPage() {
               </button>
             ))}
           </div>
-
-          {/* Search */}
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-            <input
-              type="text"
-              value={listSearch}
-              onChange={e => setListSearch(e.target.value)}
+            <input type="text" value={listSearch} onChange={e => setListSearch(e.target.value)}
               placeholder="بحث: رقم الطلب، المورد، رقم القطعة..."
               className="w-full border border-slate-200 bg-[#fafbfc] pr-8 pl-8 py-1.5 text-xs focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100 focus:bg-white"
-              style={{ borderRadius: '2px' }}
-              dir="rtl"
-            />
+              style={{ borderRadius: '2px' }} dir="rtl" />
             {listSearch && (
               <button onClick={() => setListSearch("")} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
-
           {(listSearch || statusFilter !== "all") && (
             <div className="flex items-center gap-2 text-[11px] text-slate-500 shrink-0">
               <span>{filteredRfqs.length} من {rfqs.length} سجل</span>
@@ -1709,7 +1984,6 @@ export default function SupplierQuotationsPage() {
         {/* ══════════ Content Area ══════════ */}
         <div className="flex-1 bg-[#f0f4f8] px-6 py-4">
 
-          {/* Loading */}
           {isLoading && (
             <div className="flex items-center justify-center py-20 gap-2 text-slate-400">
               <Loader2 className="h-5 w-5 animate-spin" />
@@ -1717,10 +1991,9 @@ export default function SupplierQuotationsPage() {
             </div>
           )}
 
-          {/* Empty — no data at all */}
           {!isLoading && rfqs.length === 0 && (
             <div className="bg-white border border-slate-200 flex flex-col items-center justify-center py-20 text-center">
-              <div className="w-16 h-16 rounded-sm bg-[#0f2240]/5 flex items-center justify-center mb-4">
+              <div className="w-16 h-16 bg-[#0f2240]/5 flex items-center justify-center mb-4" style={{ borderRadius: '2px' }}>
                 <Send className="h-7 w-7 text-[#0f2240]/25" />
               </div>
               <p className="text-slate-700 font-semibold text-sm">لا توجد طلبات تسعير بعد</p>
@@ -1733,7 +2006,6 @@ export default function SupplierQuotationsPage() {
             </div>
           )}
 
-          {/* Empty — filter yields nothing */}
           {!isLoading && rfqs.length > 0 && filteredRfqs.length === 0 && (
             <div className="bg-white border border-slate-200 flex flex-col items-center justify-center py-14 text-center">
               <Search className="h-8 w-8 text-slate-300 mb-3" />
@@ -1743,7 +2015,7 @@ export default function SupplierQuotationsPage() {
             </div>
           )}
 
-          {/* ══════════ Main Table ══════════ */}
+          {/* ══════════ Master List Table ══════════ */}
           {!isLoading && filteredRfqs.length > 0 && (
             <div>
               {/* Table toolbar */}
@@ -1754,27 +2026,25 @@ export default function SupplierQuotationsPage() {
                     <span className="text-slate-400 font-normal"> (مصفى من {rfqs.length})</span>
                   )}
                 </p>
-                <span className="text-[10px] text-slate-400">مرتب حسب: التاريخ (الأحدث)</span>
+                <span className="text-[10px] text-slate-400">اضغط على صف لعرض التفاصيل</span>
               </div>
 
-              <div className="border border-slate-200 overflow-hidden bg-white">
+              <div className="border border-slate-200 bg-white overflow-hidden">
                 <table className="w-full text-right text-xs">
                   <thead>
                     <tr className="border-b-2 border-slate-300">
                       {[
-                        { label: "", cls: "w-8 text-center bg-[#eef1f5]" },
-                        { label: "رقم الطلب", cls: "bg-[#eef1f5]" },
-                        { label: "طلب العميل", cls: "bg-[#eef1f5]" },
-                        { label: "أمر الشراء", cls: "bg-[#eef1f5]" },
-                        { label: "التاريخ", cls: "bg-[#eef1f5] text-center" },
-                        { label: "البنود", cls: "bg-[#eef1f5] text-center w-16" },
-                        { label: "الموردون", cls: "bg-[#eef1f5] text-center w-20" },
-                        { label: "الاستجابة", cls: "bg-[#eef1f5] text-center w-28" },
-                        { label: "الحالة", cls: "bg-[#eef1f5] w-20" },
-                        { label: "إجراءات", cls: "bg-[#eef1f5] text-center w-28" },
+                        { label: "رقم الطلب",  cls: "" },
+                        { label: "طلب العميل", cls: "" },
+                        { label: "أمر الشراء", cls: "" },
+                        { label: "التاريخ",    cls: "text-center" },
+                        { label: "البنود",     cls: "text-center w-16" },
+                        { label: "الموردون",   cls: "text-center w-20" },
+                        { label: "الاستجابة", cls: "text-center w-32" },
+                        { label: "الحالة",    cls: "w-20" },
                       ].map((col, i) => (
                         <th key={i}
-                          className={`px-3 py-2.5 text-[10px] font-bold text-slate-600 whitespace-nowrap border-l border-slate-200 last:border-l-0 tracking-wide uppercase ${col.cls}`}>
+                          className={`px-3 py-2.5 text-[10px] font-bold text-slate-600 whitespace-nowrap border-l border-slate-200 last:border-l-0 tracking-wide uppercase bg-[#eef1f5] ${col.cls}`}>
                           {col.label}
                         </th>
                       ))}
@@ -1782,261 +2052,60 @@ export default function SupplierQuotationsPage() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredRfqs.map((rfq, rowIdx) => {
-                      const isExpanded = expandedId === rfq.id;
+                      const isSelected = selectedRfq?.id === rfq.id;
                       const submittedCount = rfq.suppliers.filter(s => s.responseStatus === "submitted").length;
-                      const responseRate = rfq.suppliers.length > 0
+                      const responseRate   = rfq.suppliers.length > 0
                         ? Math.round((submittedCount / rfq.suppliers.length) * 100) : 0;
 
                       return (
-                        <React.Fragment key={rfq.id}>
-                          {/* ── Main Row ── */}
-                          <tr
-                            className={`cursor-pointer transition-colors select-none
-                              ${isExpanded
-                                ? "bg-[#1e3a5f]/5 border-r-4 border-r-[#1e3a5f]"
-                                : rowIdx % 2 === 0
-                                  ? "bg-white hover:bg-[#f8f9fc]"
-                                  : "bg-[#fafbfc] hover:bg-[#f5f7fa]"}`}
-                            onClick={() => setExpandedId(isExpanded ? null : rfq.id)}>
+                        <tr
+                          key={rfq.id}
+                          className={`cursor-pointer transition-colors select-none
+                            ${isSelected
+                              ? "bg-[#1e3a5f]/8 border-r-4 border-r-[#1e3a5f] font-medium"
+                              : rowIdx % 2 === 0
+                                ? "bg-white hover:bg-[#f8f9fc]"
+                                : "bg-[#fafbfc] hover:bg-[#f5f7fa]"}`}
+                          onClick={() => setSelectedRfq(isSelected ? null : rfq)}>
 
-                            <td className="px-2 py-2.5 text-center text-slate-400 border-l border-slate-100">
-                              {isExpanded
-                                ? <ChevronUp className="h-3.5 w-3.5 inline text-[#1e3a5f]" />
-                                : <ChevronDown className="h-3.5 w-3.5 inline text-slate-400" />}
-                            </td>
-                            <td className="px-3 py-2.5 border-l border-slate-100">
-                              <span className="font-bold text-[#0f2240] font-mono text-[11px] tracking-tight">{rfq.rfqNo}</span>
-                            </td>
-                            <td className="px-3 py-2.5 font-mono text-slate-500 text-[11px] border-l border-slate-100">{rfq.sourceQuotationNo || <span className="text-slate-300">—</span>}</td>
-                            <td className="px-3 py-2.5 text-slate-500 text-[11px] border-l border-slate-100">{rfq.customerOrderNo || <span className="text-slate-300">—</span>}</td>
-                            <td className="px-3 py-2.5 text-center font-mono text-slate-500 text-[11px] border-l border-slate-100">{rfq.requestDate}</td>
-                            <td className="px-3 py-2.5 text-center border-l border-slate-100">
-                              <span className="inline-flex items-center justify-center w-6 h-6 bg-slate-100 text-slate-700 font-bold text-[10px]"
-                                style={{ borderRadius: '2px' }}>{rfq.items.length}</span>
-                            </td>
-                            <td className="px-3 py-2.5 text-center border-l border-slate-100">
-                              <span className="inline-flex items-center justify-center w-6 h-6 bg-slate-100 text-slate-700 font-bold text-[10px]"
-                                style={{ borderRadius: '2px' }}>{rfq.suppliers.length}</span>
-                            </td>
-                            <td className="px-3 py-2.5 border-l border-slate-100">
-                              {rfq.suppliers.length > 0 ? (
-                                <div className="flex items-center gap-1.5">
-                                  <div className="flex-1 h-1.5 bg-slate-200 overflow-hidden" style={{ borderRadius: '1px' }}>
-                                    <div
-                                      className={`h-full transition-all ${responseRate >= 80 ? "bg-emerald-500" : responseRate >= 40 ? "bg-amber-400" : "bg-rose-400"}`}
-                                      style={{ width: `${responseRate}%` }} />
-                                  </div>
-                                  <span className={`text-[10px] font-bold shrink-0 ${submittedCount > 0 ? "text-emerald-600" : "text-slate-400"}`}>
-                                    {submittedCount}/{rfq.suppliers.length}
-                                  </span>
+                          <td className="px-3 py-2.5 border-l border-slate-100">
+                            <span className="font-bold text-[#0f2240] font-mono text-[11px]">{rfq.rfqNo}</span>
+                          </td>
+                          <td className="px-3 py-2.5 font-mono text-slate-500 text-[11px] border-l border-slate-100">
+                            {rfq.sourceQuotationNo || <span className="text-slate-300">—</span>}
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-500 text-[11px] border-l border-slate-100">
+                            {rfq.customerOrderNo || <span className="text-slate-300">—</span>}
+                          </td>
+                          <td className="px-3 py-2.5 text-center font-mono text-slate-500 text-[11px] border-l border-slate-100">
+                            {rfq.requestDate}
+                          </td>
+                          <td className="px-3 py-2.5 text-center border-l border-slate-100">
+                            <span className="inline-flex items-center justify-center w-6 h-6 bg-slate-100 text-slate-700 font-bold text-[10px]"
+                              style={{ borderRadius: '2px' }}>{rfq.items.length}</span>
+                          </td>
+                          <td className="px-3 py-2.5 text-center border-l border-slate-100">
+                            <span className="inline-flex items-center justify-center w-6 h-6 bg-slate-100 text-slate-700 font-bold text-[10px]"
+                              style={{ borderRadius: '2px' }}>{rfq.suppliers.length}</span>
+                          </td>
+                          <td className="px-3 py-2.5 border-l border-slate-100">
+                            {rfq.suppliers.length > 0 ? (
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-1.5 bg-slate-200 overflow-hidden" style={{ borderRadius: '1px' }}>
+                                  <div
+                                    className={`h-full ${responseRate >= 80 ? "bg-emerald-500" : responseRate >= 40 ? "bg-amber-400" : "bg-rose-400"}`}
+                                    style={{ width: `${responseRate}%` }} />
                                 </div>
-                              ) : <span className="text-slate-300 text-[11px]">—</span>}
-                            </td>
-                            <td className="px-3 py-2.5 border-l border-slate-100">
-                              <StatusBadge status={rfq.status} />
-                            </td>
-                            <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
-                              <div className="flex items-center justify-center gap-1">
-                                {submittedCount > 0 && (
-                                  <button
-                                    onClick={() => setAnalysisRfq({ id: rfq.id, rfqNo: rfq.rfqNo })}
-                                    title="تحليل الأسعار"
-                                    className="flex items-center gap-0.5 px-1.5 py-1 border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 text-[10px] font-semibold transition-colors"
-                                    style={{ borderRadius: '2px' }}>
-                                    <BarChart3 className="h-3 w-3" /> تحليل
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => handleDelete(rfq.id)}
-                                  title="حذف"
-                                  className="p-1 border border-red-200 bg-white hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
-                                  style={{ borderRadius: '2px' }}>
-                                  <Trash2 className="h-3 w-3" />
-                                </button>
+                                <span className={`text-[10px] font-bold shrink-0 ${submittedCount > 0 ? "text-emerald-600" : "text-slate-400"}`}>
+                                  {submittedCount}/{rfq.suppliers.length}
+                                </span>
                               </div>
-                            </td>
-                          </tr>
-
-                          {/* ── Expanded Detail Panel ── */}
-                          {isExpanded && (
-                            <tr>
-                              <td colSpan={10} className="p-0 border-b border-slate-200">
-                                <div className="bg-white border-r-4 border-r-[#1e3a5f]">
-
-                                  {/* Panel Header */}
-                                  <div className="flex items-center justify-between px-5 py-2.5 bg-[#eef1f5] border-b border-slate-200">
-                                    <div className="flex items-center gap-3">
-                                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#0f2240]">
-                                        <FileText className="h-3.5 w-3.5 text-[#1e3a5f]" />
-                                        تفاصيل الطلب:
-                                        <span className="font-mono ml-1">{rfq.rfqNo}</span>
-                                      </div>
-                                      {rfq.deadline && (
-                                        <span className="text-[10px] text-slate-500 border border-slate-300 bg-white px-2 py-0.5" style={{ borderRadius: '2px' }}>
-                                          الموعد النهائي: <span className="font-mono">{rfq.deadline}</span>
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      {submittedCount > 0 && (
-                                        <button onClick={() => setAnalysisRfq({ id: rfq.id, rfqNo: rfq.rfqNo })}
-                                          className="flex items-center gap-1.5 px-3 py-1.5 border border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-700 text-[10px] font-bold transition-colors"
-                                          style={{ borderRadius: '2px' }}>
-                                          <BarChart3 className="h-3.5 w-3.5" /> تحليل ومقارنة الأسعار
-                                        </button>
-                                      )}
-                                      <button onClick={() => setAddingSupplierForRfq(rfq)}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-[10px] font-bold transition-colors"
-                                        style={{ borderRadius: '2px' }}>
-                                        <UserPlus className="h-3.5 w-3.5" /> إضافة مورد
-                                      </button>
-                                    </div>
-                                  </div>
-
-                                  {/* Panel Body */}
-                                  <div className="px-5 py-4">
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-
-                                      {/* ── Items Sub-table ── */}
-                                      <div>
-                                        <div className="flex items-center gap-2 mb-2">
-                                          <div className="w-1 h-4 bg-[#1e3a5f]" />
-                                          <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wide">
-                                            البنود المطلوبة
-                                            <span className="mr-1.5 text-[10px] font-normal text-slate-400 normal-case tracking-normal">({rfq.items.length} بند)</span>
-                                          </p>
-                                        </div>
-                                        <div className="border border-slate-200 overflow-hidden">
-                                          <table className="w-full text-[11px] text-right">
-                                            <thead>
-                                              <tr className="bg-[#eef1f5] border-b border-slate-200">
-                                                <th className="px-2 py-1.5 text-[10px] font-bold text-slate-500 w-7 text-center border-l border-slate-200">#</th>
-                                                <th className="px-2 py-1.5 text-[10px] font-bold text-slate-500 border-l border-slate-200">الوصف</th>
-                                                <th className="px-2 py-1.5 text-[10px] font-bold text-slate-500 text-center border-l border-slate-200 w-16">الكمية</th>
-                                                <th className="px-2 py-1.5 text-[10px] font-bold text-slate-500 text-center w-14">الوحدة</th>
-                                              </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                              {rfq.items.map((item, idx) => (
-                                                <tr key={item.id} className={idx % 2 === 0 ? "bg-white" : "bg-[#fafbfc]"}>
-                                                  <td className="px-2 py-1.5 text-slate-400 text-center border-l border-slate-100">{idx + 1}</td>
-                                                  <td className="px-2 py-1.5 font-medium border-l border-slate-100">
-                                                    {item.description}
-                                                    {item.partNo && <div className="text-[10px] text-slate-400 font-mono mt-0.5">{item.partNo}</div>}
-                                                  </td>
-                                                  <td className="px-2 py-1.5 text-center font-mono border-l border-slate-100">{fmtQty(item.quantity)}</td>
-                                                  <td className="px-2 py-1.5 text-center text-slate-500">{item.unit || "—"}</td>
-                                                </tr>
-                                              ))}
-                                            </tbody>
-                                          </table>
-                                        </div>
-                                      </div>
-
-                                      {/* ── Suppliers Sub-table ── */}
-                                      <div>
-                                        <div className="flex items-center gap-2 mb-2">
-                                          <div className="w-1 h-4 bg-emerald-500" />
-                                          <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wide">
-                                            الموردون
-                                            <span className="mr-1.5 text-[10px] font-normal text-slate-400 normal-case tracking-normal">({rfq.suppliers.length} مورد)</span>
-                                          </p>
-                                        </div>
-                                        <div className="border border-slate-200 overflow-hidden">
-                                          <table className="w-full text-[11px] text-right">
-                                            <thead>
-                                              <tr className="bg-[#eef1f5] border-b border-slate-200">
-                                                <th className="px-2 py-1.5 text-[10px] font-bold text-slate-500 border-l border-slate-200">المورد</th>
-                                                <th className="px-2 py-1.5 text-[10px] font-bold text-slate-500 text-center border-l border-slate-200 w-20">الحالة</th>
-                                                <th className="px-2 py-1.5 text-[10px] font-bold text-slate-500 text-center border-l border-slate-200 w-20">الرؤية</th>
-                                                <th className="px-2 py-1.5 text-[10px] font-bold text-slate-500 text-center w-24">إرسال</th>
-                                              </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                              {rfq.suppliers.map((sup, idx) => (
-                                                <React.Fragment key={sup.supplierId}>
-                                                  <tr className={idx % 2 === 0 ? "bg-white" : "bg-[#fafbfc]"}>
-                                                    <td className="px-2 py-1.5 font-semibold text-slate-800 border-l border-slate-100">{sup.companyName}</td>
-                                                    <td className="px-2 py-1.5 text-center border-l border-slate-100">
-                                                      <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold border
-                                                        ${sup.responseStatus === "submitted"
-                                                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                                          : "bg-amber-50 text-amber-700 border-amber-200"}`}
-                                                        style={{ borderRadius: '2px' }}>
-                                                        {sup.responseStatus === "submitted"
-                                                          ? <><Check className="h-2.5 w-2.5" /> استجاب</>
-                                                          : <><Clock className="h-2.5 w-2.5" /> انتظار</>}
-                                                      </span>
-                                                    </td>
-                                                    <td className="px-2 py-1.5 text-center border-l border-slate-100">
-                                                      <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold border
-                                                        ${sup.firstOpenedAt
-                                                          ? "bg-sky-50 text-sky-700 border-sky-200"
-                                                          : "bg-slate-50 text-slate-400 border-slate-200"}`}
-                                                        style={{ borderRadius: '2px' }}>
-                                                        {sup.firstOpenedAt
-                                                          ? <><Eye className="h-2.5 w-2.5" /> فتح</>
-                                                          : <><EyeOff className="h-2.5 w-2.5" /> لم يفتح</>}
-                                                      </span>
-                                                    </td>
-                                                    <td className="px-2 py-1.5 text-center" onClick={e => e.stopPropagation()}>
-                                                      <div className="flex items-center justify-center gap-1">
-                                                        <button title="PDF" onClick={() => downloadRfqPdf(rfq, sup)}
-                                                          className="p-1 border border-slate-200 bg-white hover:bg-slate-100 text-slate-500 transition-colors"
-                                                          style={{ borderRadius: '2px' }}>
-                                                          <FileText className="h-3 w-3" />
-                                                        </button>
-                                                        <button title="واتساب" onClick={() => sendWhatsApp(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup.token)}
-                                                          className="p-1 border border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-600 transition-colors"
-                                                          style={{ borderRadius: '2px' }}>
-                                                          <MessageSquare className="h-3 w-3" />
-                                                        </button>
-                                                        <button title="إيميل" onClick={() => openEmail(sup, rfq.rfqNo, rfq.requestDate, rfq.items, sup.token)}
-                                                          className="p-1 border border-orange-200 bg-white hover:bg-orange-50 text-orange-500 transition-colors"
-                                                          style={{ borderRadius: '2px' }}>
-                                                          <Mail className="h-3 w-3" />
-                                                        </button>
-                                                      </div>
-                                                    </td>
-                                                  </tr>
-                                                  {/* Token link row */}
-                                                  {sup.token && (
-                                                    <tr className="border-b border-slate-100 bg-[#f8f9fc]" onClick={e => e.stopPropagation()}>
-                                                      <td colSpan={4} className="px-3 py-1.5">
-                                                        <div className="flex items-center gap-2">
-                                                          <LinkIcon className="h-3 w-3 shrink-0 text-[#1e3a5f]" />
-                                                          <span className="text-[10px] text-slate-400 font-mono truncate flex-1">{getRfqLink(sup.token)}</span>
-                                                          <button onClick={() => copyTokenLink(sup.token, setCopiedToken)}
-                                                            className="flex items-center gap-0.5 px-2 py-0.5 border border-slate-200 bg-white hover:border-[#1e3a5f] hover:text-[#1e3a5f] text-[10px] text-slate-500 transition-colors"
-                                                            style={{ borderRadius: '2px' }}>
-                                                            {copiedToken === sup.token
-                                                              ? <><Check className="h-2.5 w-2.5 text-emerald-600" /> تم النسخ</>
-                                                              : <><Copy className="h-2.5 w-2.5" /> نسخ الرابط</>}
-                                                          </button>
-                                                        </div>
-                                                      </td>
-                                                    </tr>
-                                                  )}
-                                                </React.Fragment>
-                                              ))}
-                                            </tbody>
-                                          </table>
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    {/* Notes */}
-                                    {rfq.notes && (
-                                      <div className="mt-4 border-r-4 border-amber-400 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
-                                        <span className="font-bold">ملاحظات: </span>{rfq.notes}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
+                            ) : <span className="text-slate-300">—</span>}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <StatusBadge status={rfq.status} />
+                          </td>
+                        </tr>
                       );
                     })}
                   </tbody>
@@ -2044,13 +2113,29 @@ export default function SupplierQuotationsPage() {
               </div>
             </div>
           )}
-        </div>{/* end content area */}
-      </div>{/* end full-bleed wrapper */}
+        </div>{/* end content */}
+      </div>{/* end full-bleed */}
+
+      {/* ══════════ Detail Drawer (Master-Detail) ══════════ */}
+      {selectedRfq && (
+        <RfqDetailDrawer
+          rfq={selectedRfq}
+          copiedToken={copiedToken}
+          setCopiedToken={setCopiedToken}
+          onClose={() => setSelectedRfq(null)}
+          onAddSupplier={() => setAddingSupplierForRfq(selectedRfq)}
+          onAnalysis={() => setAnalysisRfq({ id: selectedRfq.id, rfqNo: selectedRfq.rfqNo })}
+          onDelete={() => handleDelete(selectedRfq.id)}
+        />
+      )}
 
       {addingSupplierForRfq && (
         <AddSupplierModal rfq={addingSupplierForRfq} apiBase={API_BASE}
           onClose={() => setAddingSupplierForRfq(null)}
-          onAdded={() => { queryClient.invalidateQueries({ queryKey: ["supplier-quotations"] }); setAddingSupplierForRfq(null); }} />
+          onAdded={() => {
+            queryClient.invalidateQueries({ queryKey: ["supplier-quotations"] });
+            setAddingSupplierForRfq(null);
+          }} />
       )}
       {wizardOpen && (
         <SendWizard onClose={() => setWizardOpen(false)}
