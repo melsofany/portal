@@ -71,6 +71,7 @@ interface Rfq {
   sourceQuotationNo: string;
   customerOrderNo: string;
   requestDate: string;
+  deadline?: string;
   notes: string;
   status: string;
   createdAt: string;
