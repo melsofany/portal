@@ -120,10 +120,15 @@ import { Router } from "express";
     }
 
     let representativeName = "", representativePhone = "";
-    const repId = representativeId ? Number(representativeId) : null;
+    let repId: number | null = representativeId ? Number(representativeId) : null;
     if (repId) {
       const [emp] = await db.select().from(employeesTable).where(eq(employeesTable.id, repId));
-      if (emp) { representativeName = emp.fullName ?? ""; representativePhone = emp.phone ?? ""; }
+      if (emp) {
+        representativeName = emp.fullName ?? "";
+        representativePhone = emp.phone ?? "";
+      } else {
+        repId = null; // الموظف غير موجود — لا نخزن ID يتيم
+      }
     }
 
     const totalAmount = (items as any[]).reduce((s: number, it: any) =>

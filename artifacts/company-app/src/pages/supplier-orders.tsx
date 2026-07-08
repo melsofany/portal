@@ -257,7 +257,7 @@ import React, { useState, useMemo, useEffect } from "react";
         customerOrderId: foundCO.id, customerOrderNo: foundCO.orderNo,
         customerOrderItemId: it.id, description: it.description, partNo: it.partNo, unit: it.unit,
         quantity: selectedItems[it.id]?.quantity || String(it.quantity),
-        unitPrice: selectedItems[it.id]?.unitPrice || "0",
+        unitPrice: selectedItems[it.id]?.unitPrice ?? "",  // يبقى فارغاً إذا لم يوجد سعر من المورد
         key: foundCO.id + "-" + it.id,
       }));
       if (toAdd.length === 0) { setSearchError("يجب اختيار بند واحد على الأقل"); return; }
