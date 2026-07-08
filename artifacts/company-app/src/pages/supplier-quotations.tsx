@@ -418,7 +418,7 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
       return `<tr style="background:${idx % 2 === 0 ? '#fff' : '#f8fafc'}"><td style="padding:8px 10px;border-bottom:1px solid #eee;font-weight:500">${item.description}${item.partNo ? `<div style='font-size:10px;color:#94a3b8'>${item.partNo}</div>` : ''}</td><td style="padding:8px;border-bottom:1px solid #eee;text-align:center;font-size:11px;color:#64748b;font-family:monospace">${fmtQty(item.quantity)} ${item.unit || ''}</td>${cells}${bestCell}</tr>`;
     }).join('');
     const totalCells = submittedSuppliers.map(s => { const t = getSupplierTotal(s); const isBest = s.companyName === bestName && t > 0; return `<td style="padding:10px 8px;text-align:center;font-family:monospace;font-weight:700;color:${isBest ? '#15803d' : '#334155'};background:${isBest ? '#f0fdf4' : 'transparent'}">${t > 0 ? t.toFixed(3) : '—'}${isBest ? ' ★' : ''}</td>`; }).join('');
-    const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>تحليل الأسعار - ${rfqNo}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#111;padding:12mm 16mm}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f2240;padding-bottom:14px;margin-bottom:18px}.logo h1{font-size:20px;font-weight:bold;color:#0f2240}.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}.kpi{border-radius:8px;padding:12px;text-align:center}.kpi .num{font-size:26px;font-weight:bold}.section-title{font-size:12px;font-weight:bold;color:#0f2240;border-right:3px solid #0064d9;padding-right:8px;margin-bottom:10px}table{width:100%;border-collapse:collapse}th{padding:10px 8px;background:#0f2240;color:#fff;font-size:11px;text-align:right}@media print{@page{margin:10mm}body{padding:0}}</style></head><body>
+    const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>تحليل الأسعار - ${rfqNo}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#111;padding:12mm 16mm}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f2240;padding-bottom:14px;margin-bottom:18px}.logo h1{font-size:20px;font-weight:bold;color:#0f2240}.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}.kpi{border-radius:8px;padding:12px;text-align:center}.kpi .num{font-size:26px;font-weight:bold}.section-title{font-size:12px;font-weight:bold;color:#0f2240;border-right:3px solid #1e3a5f;padding-right:8px;margin-bottom:10px}table{width:100%;border-collapse:collapse}th{padding:10px 8px;background:#0f2240;color:#fff;font-size:11px;text-align:right}@media print{@page{margin:10mm}body{padding:0}}</style></head><body>
     <div class="header"><div class="logo"><h1>تحليل ومقارنة الأسعار</h1><p style="font-size:10px;color:#64748b;margin-top:3px">طباعة في: ${today}</p></div><div style="text-align:left;font-size:11px;color:#64748b"><strong style="display:block;font-size:14px;color:#0f2240;font-family:monospace">${rfqNo}</strong>إجمالي البنود: ${totalItems}</div></div>
     <div class="kpi-grid"><div class="kpi" style="background:#f1f5f9;border:1px solid #e2e8f0"><div class="num" style="color:#1e293b">${totalSuppliers}</div><div style="font-size:10px;color:#64748b;margin-top:4px">إجمالي الموردين</div></div><div class="kpi" style="background:#f0fdf4;border:1px solid #bbf7d0"><div class="num" style="color:#15803d">${submittedSuppliers.length}</div><div style="font-size:10px;color:#16a34a;margin-top:4px">استجابوا</div></div><div class="kpi" style="background:#fffbeb;border:1px solid #fde68a"><div class="num" style="color:#d97706">${pendingSuppliers.length}</div><div style="font-size:10px;color:#b45309;margin-top:4px">في الانتظار</div></div><div class="kpi" style="background:#eff6ff;border:1px solid #bfdbfe"><div class="num" style="color:#1d4ed8">${responseRate}%</div><div style="font-size:10px;color:#2563eb;margin-top:4px">نسبة الاستجابة</div></div></div>
     ${submittedSuppliers.length > 0 ? `<div style="margin-bottom:20px"><div class="section-title">ترتيب الموردين</div><table><thead><tr><th style="width:30px">#</th><th>المورد</th><th style="text-align:center;width:80px">البنود</th><th style="text-align:center;width:120px">التغطية</th><th style="text-align:center;width:100px">الإجمالي</th></tr></thead><tbody>${leaderRows}</tbody></table></div><div><div class="section-title">تفاصيل الأسعار بند بند</div><table><thead><tr><th>البند</th><th style="text-align:center;width:70px">الكمية</th>${headerCols}<th style="text-align:center;width:90px;background:#1e3a8a">أفضل سعر</th></tr></thead><tbody>${bodyRows}</tbody><tfoot><tr style="background:#f1f5f9;font-weight:bold;border-top:2px solid #cbd5e1"><td style="padding:10px;font-weight:700">الإجمالي الكلي</td><td></td>${totalCells}<td style="padding:10px;text-align:center;font-family:monospace;font-weight:700;color:#1d4ed8;background:#eff6ff">${minTotal > 0 ? minTotal.toFixed(3) : '—'}</td></tr></tfoot></table></div>` : '<p style="text-align:center;color:#94a3b8;padding:40px">لم يستجب أي مورد حتى الآن</p>'}
@@ -450,7 +450,7 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
         </DialogHeader>
 
         <div className="p-5 space-y-5 overflow-auto max-h-[82vh]">
-          {isLoading && <div className="flex items-center justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-[#0064d9]" /></div>}
+          {isLoading && <div className="flex items-center justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-[#1e3a5f]" /></div>}
           {error && <p className="text-red-500 text-sm">حدث خطأ في تحميل البيانات</p>}
 
           {data && (
@@ -480,8 +480,8 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
                 <>
                   {/* Bar chart comparison */}
                   <div className="border border-slate-200 bg-white rounded p-4">
-                    <h3 className="text-xs font-semibold text-[#0f2240] mb-3 flex items-center gap-1.5 border-r-2 border-[#0064d9] pr-2">
-                      <BarChart3 className="h-3.5 w-3.5 text-[#0064d9]" /> مقارنة الإجمالي الكلي للموردين
+                    <h3 className="text-xs font-semibold text-[#0f2240] mb-3 flex items-center gap-1.5 border-r-2 border-[#1e3a5f] pr-2">
+                      <BarChart3 className="h-3.5 w-3.5 text-[#1e3a5f]" /> مقارنة الإجمالي الكلي للموردين
                     </h3>
                     <div className="space-y-3">
                       {supplierTotals.map((sup, idx) => {
@@ -500,7 +500,7 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
                               </div>
                             </div>
                             <div className="h-2 w-full bg-slate-100 rounded overflow-hidden">
-                              <div className={`h-full rounded transition-all ${sup.isBest && sup.total > 0 ? 'bg-emerald-500' : 'bg-[#0064d9]'}`} style={{ width: `${barPct}%` }} />
+                              <div className={`h-full rounded transition-all ${sup.isBest && sup.total > 0 ? 'bg-emerald-500' : 'bg-[#1e3a5f]'}`} style={{ width: `${barPct}%` }} />
                             </div>
                             <div className="flex items-center gap-1">
                               <div className="h-1 rounded bg-slate-200 flex-1 overflow-hidden">
@@ -516,7 +516,7 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
 
                   {/* Leaderboard */}
                   <div className="border border-slate-200 rounded overflow-hidden">
-                    <div className="bg-[#dce3ec] px-4 py-2 text-[11px] font-semibold text-slate-700 border-b border-slate-300">ترتيب الموردين</div>
+                    <div className="bg-slate-50 px-4 py-2 text-[11px] font-semibold text-slate-700 border-b border-slate-300">ترتيب الموردين</div>
                     <table className="w-full text-xs text-right">
                       <thead>
                         <tr className="bg-[#f0f4f8] border-b border-slate-200">
@@ -555,7 +555,7 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
 
                   {/* Detailed price table */}
                   <div className="border border-slate-200 rounded overflow-hidden">
-                    <div className="bg-[#dce3ec] px-4 py-2 text-[11px] font-semibold text-slate-700 border-b border-slate-300">تفاصيل الأسعار بند بند</div>
+                    <div className="bg-slate-50 px-4 py-2 text-[11px] font-semibold text-slate-700 border-b border-slate-300">تفاصيل الأسعار بند بند</div>
                     <div className="overflow-auto">
                       <table className="w-full text-xs text-right min-w-[600px]">
                         <thead>
@@ -614,7 +614,7 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
                                   );
                                 })}
                                 <td className="px-3 py-2 text-center bg-blue-50 border-l border-blue-200">
-                                  {best !== null ? <span className="font-mono font-bold text-[#0064d9]">{best.toFixed(3)}</span> : <span className="text-slate-300">—</span>}
+                                  {best !== null ? <span className="font-mono font-bold text-[#1e3a5f]">{best.toFixed(3)}</span> : <span className="text-slate-300">—</span>}
                                 </td>
                               </tr>
                             );
@@ -629,7 +629,7 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
                               const isBest = s.companyName === getBestTotalSupplier() && total > 0;
                               return <td key={s.id} className={`px-3 py-2.5 text-center font-mono text-xs ${isBest ? 'text-emerald-700 bg-emerald-50' : 'text-slate-700'}`}>{total > 0 ? total.toFixed(3) : '—'}{isBest && <span className="mr-1 text-[10px]">★</span>}</td>;
                             })}
-                            <td className="px-3 py-2.5 text-center bg-blue-50 font-mono text-[#0064d9] text-xs">
+                            <td className="px-3 py-2.5 text-center bg-blue-50 font-mono text-[#1e3a5f] text-xs">
                               {submittedSuppliers.length > 0 ? (() => { const v = Math.min(...submittedSuppliers.map(s => getSupplierTotal(s)).filter(t => t > 0)); return isFinite(v) ? v.toFixed(3) : '—'; })() : '—'}
                             </td>
                           </tr>
@@ -641,7 +641,7 @@ function AnalysisModal({ rfqId, rfqNo, onClose }: { rfqId: number; rfqNo: string
                   {/* Supplier Terms Section */}
                   {submittedSuppliers.some(s => s.paymentTerms || s.offerValidityDays || s.deliveryDays || s.responseNotes) && (
                     <div className="border border-slate-200 rounded overflow-hidden">
-                      <div className="bg-[#dce3ec] px-4 py-2 text-[11px] font-semibold text-slate-700 border-b border-slate-300">شروط الموردين</div>
+                      <div className="bg-slate-50 px-4 py-2 text-[11px] font-semibold text-slate-700 border-b border-slate-300">شروط الموردين</div>
                       <div className="overflow-auto">
                         <table className="w-full text-xs text-right min-w-[500px]">
                           <thead>
@@ -881,7 +881,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   const STEPS = ["استيراد البنود", "اختيار البنود", "اختيار الموردين", "مراجعة وإرسال"];
 
   // SAP-style input class
-  const inputCls = "w-full border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-[#0064d9]/30 rounded-sm";
+  const inputCls = "w-full border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-200 rounded-sm";
   const labelCls = "block text-[11px] font-semibold text-slate-600 mb-1";
 
   return (
@@ -909,13 +909,13 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
               return (
                 <React.Fragment key={n}>
                   <div className={`flex items-center gap-2 px-4 py-2.5 flex-1 min-w-0 relative
-                    ${active ? "bg-white border-b-2 border-[#0064d9]" : done ? "bg-[#f0f4f8]" : "bg-[#f0f4f8]"}`}>
+                    ${active ? "bg-white border-b-2 border-[#1e3a5f]" : done ? "bg-[#f0f4f8]" : "bg-[#f0f4f8]"}`}>
                     <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold
-                      ${active ? "bg-[#0064d9] text-white" : done ? "bg-emerald-500 text-white" : "bg-slate-300 text-slate-500"}`}>
+                      ${active ? "bg-[#1e3a5f] text-white" : done ? "bg-emerald-500 text-white" : "bg-slate-300 text-slate-500"}`}>
                       {done ? <Check className="h-3 w-3" /> : n}
                     </span>
                     <span className={`text-[11px] font-medium truncate hidden sm:block
-                      ${active ? "text-[#0064d9]" : done ? "text-emerald-600" : "text-slate-400"}`}>
+                      ${active ? "text-[#1e3a5f]" : done ? "text-emerald-600" : "text-slate-400"}`}>
                       {label}
                     </span>
                   </div>
@@ -936,7 +936,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
           {/* ── STEP 1: Import CQ ── */}
           {step === 1 && (
             <div className="space-y-4">
-              <p className="text-[11px] text-slate-500 border-r-2 border-[#0064d9] pr-2">ابحث عن طلب تسعير العميل برقم الطلب أو رقم أمر الشراء</p>
+              <p className="text-[11px] text-slate-500 border-r-2 border-[#1e3a5f] pr-2">ابحث عن طلب تسعير العميل برقم الطلب أو رقم أمر الشراء</p>
 
               <div className="flex gap-2">
                 <div className="flex-1 relative">
@@ -949,7 +949,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                   />
                 </div>
                 <button onClick={handleSearch} disabled={searching || !searchTerm.trim()}
-                  className="flex items-center gap-1.5 px-4 py-1.5 bg-[#0064d9] hover:bg-[#0054b8] text-white text-xs font-semibold disabled:opacity-50 transition-colors rounded-sm">
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-xs font-semibold disabled:opacity-50 transition-colors rounded-sm">
                   {searching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
                   بحث
                 </button>
@@ -964,7 +964,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
               {/* Multiple results */}
               {searchResults.length > 1 && (
                 <div className="border border-slate-200 rounded-sm overflow-hidden">
-                  <div className="bg-[#dce3ec] px-3 py-2 text-[11px] font-semibold text-slate-600 border-b border-slate-300">
+                  <div className="bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-600 border-b border-slate-300">
                     تم العثور على {searchResults.length} نتيجة — اختر الطلب المناسب
                   </div>
                   <div className="divide-y divide-slate-100 max-h-48 overflow-auto">
@@ -972,7 +972,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                       <button key={r.id} onClick={() => handleSelectCQ(r.id)}
                         className="w-full text-right px-4 py-2.5 hover:bg-blue-50 transition-colors flex justify-between items-center gap-3">
                         <div className="flex flex-col gap-0.5">
-                          <span className="text-xs font-semibold text-[#0064d9] font-mono">{r.quotationNo}</span>
+                          <span className="text-xs font-semibold text-[#1e3a5f] font-mono">{r.quotationNo}</span>
                           <span className="text-[11px] text-slate-500">{r.customerName || "—"}</span>
                         </div>
                         <span className="text-[10px] text-slate-400 shrink-0">{r.requestDate || ""}</span>
@@ -996,11 +996,11 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                     <div><span className="text-slate-400">رقم الطلب: </span><span className="font-semibold font-mono text-[#0f2240]">{foundCQ.quotationNo}</span></div>
                     <div><span className="text-slate-400">العميل: </span><span className="font-semibold">{foundCQ.customerName}</span></div>
                     <div><span className="text-slate-400">رقم أمر الشراء: </span><span className="font-medium">{foundCQ.customerOrderNo || "—"}</span></div>
-                    <div><span className="text-slate-400">عدد البنود: </span><span className="font-semibold text-[#0064d9]">{foundCQ.items.length} بند</span></div>
+                    <div><span className="text-slate-400">عدد البنود: </span><span className="font-semibold text-[#1e3a5f]">{foundCQ.items.length} بند</span></div>
                   </div>
                   <div className="mx-3 mb-3 border border-slate-200 rounded-sm overflow-hidden">
                     <table className="w-full text-[11px] text-right">
-                      <thead className="bg-[#dce3ec] border-b border-slate-300">
+                      <thead className="bg-slate-50 border-b border-slate-300">
                         <tr>
                           <TH className="w-8">#</TH>
                           <TH>الوصف</TH>
@@ -1029,16 +1029,16 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
           {step === 2 && foundCQ && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-[11px] text-slate-500 border-r-2 border-[#0064d9] pr-2">اختر البنود التي تريد إرسالها للموردين</p>
+                <p className="text-[11px] text-slate-500 border-r-2 border-[#1e3a5f] pr-2">اختر البنود التي تريد إرسالها للموردين</p>
                 <div className="flex items-center gap-2 text-[11px]">
-                  <button className="text-[#0064d9] hover:underline font-medium" onClick={() => setSelectedItemIds(new Set(foundCQ.items.map(i => i.id)))}>تحديد الكل</button>
+                  <button className="text-[#1e3a5f] hover:underline font-medium" onClick={() => setSelectedItemIds(new Set(foundCQ.items.map(i => i.id)))}>تحديد الكل</button>
                   <span className="text-slate-300">|</span>
                   <button className="text-slate-500 hover:underline" onClick={() => setSelectedItemIds(new Set())}>إلغاء الكل</button>
                 </div>
               </div>
               <div className="border border-slate-200 rounded-sm overflow-hidden">
                 <table className="w-full text-[11px] text-right">
-                  <thead className="bg-[#dce3ec] border-b border-slate-300">
+                  <thead className="bg-slate-50 border-b border-slate-300">
                     <tr>
                       <TH className="w-10 text-center">✓</TH>
                       <TH>الوصف</TH>
@@ -1057,7 +1057,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                             ${checked ? "bg-blue-50" : idx % 2 === 0 ? "bg-white hover:bg-slate-50" : "bg-slate-50/30 hover:bg-slate-50"}`}
                           onClick={() => { const s = new Set(selectedItemIds); checked ? s.delete(item.id) : s.add(item.id); setSelectedItemIds(s); }}>
                           <td className="px-3 py-1.5 text-center">
-                            <div className={`inline-flex h-4 w-4 items-center justify-center rounded-sm border-2 transition-colors ${checked ? "bg-[#0064d9] border-[#0064d9]" : "border-slate-300"}`}>
+                            <div className={`inline-flex h-4 w-4 items-center justify-center rounded-sm border-2 transition-colors ${checked ? "bg-[#1e3a5f] border-[#1e3a5f]" : "border-slate-300"}`}>
                               {checked && <Check className="h-2.5 w-2.5 text-white" />}
                             </div>
                           </td>
@@ -1072,14 +1072,14 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                   </tbody>
                 </table>
               </div>
-              <p className="text-[11px] text-slate-400">تم تحديد <span className="font-semibold text-[#0064d9]">{selectedItemIds.size}</span> من {foundCQ.items.length} بند</p>
+              <p className="text-[11px] text-slate-400">تم تحديد <span className="font-semibold text-[#1e3a5f]">{selectedItemIds.size}</span> من {foundCQ.items.length} بند</p>
             </div>
           )}
 
           {/* ── STEP 3: Select Suppliers ── */}
           {step === 3 && (
             <div className="space-y-3">
-              <p className="text-[11px] text-slate-500 border-r-2 border-[#0064d9] pr-2">
+              <p className="text-[11px] text-slate-500 border-r-2 border-[#1e3a5f] pr-2">
                 اختر الموردين — سيصل لكل مورد رابط خاص للرد على جميع البنود ({selectedItems.length} بند)
               </p>
 
@@ -1089,7 +1089,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                 {[{ id: "all", name: "الكل" }, ...categories.map(c => ({ id: String(c.id), name: c.name }))].map(cat => (
                   <button key={cat.id} onClick={() => setCatFilter(cat.id)}
                     className={`px-2.5 py-0.5 rounded-sm text-[10px] font-semibold border transition-all
-                      ${catFilter === cat.id ? "bg-[#0f2240] text-white border-[#0f2240]" : "border-slate-300 text-slate-600 bg-white hover:border-[#0064d9] hover:text-[#0064d9]"}`}>
+                      ${catFilter === cat.id ? "bg-[#0f2240] text-white border-[#0f2240]" : "border-slate-300 text-slate-600 bg-white hover:border-[#1e3a5f] hover:text-[#1e3a5f]"}`}>
                     {cat.name}
                   </button>
                 ))}
@@ -1126,13 +1126,13 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                           <div key={sup.id}
                             onClick={() => { const next = new Set(selectedSupplierIds); checked ? next.delete(sup.id) : next.add(sup.id); setSelectedSupplierIds(next); }}
                             className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer select-none transition-colors border-b border-slate-100 last:border-0
-                              ${checked ? "bg-[#0064d9]/8 border-l-2 border-l-[#0064d9]" : idx % 2 === 0 ? "bg-white hover:bg-slate-50" : "bg-slate-50/30 hover:bg-slate-50"}`}>
+                              ${checked ? "bg-[#1e3a5f]/8 border-l-2 border-l-[#1e3a5f]" : idx % 2 === 0 ? "bg-white hover:bg-slate-50" : "bg-slate-50/30 hover:bg-slate-50"}`}>
                             <div className={`shrink-0 h-4 w-4 rounded-sm border-2 flex items-center justify-center transition-colors
-                              ${checked ? "bg-[#0064d9] border-[#0064d9]" : "border-slate-300"}`}>
+                              ${checked ? "bg-[#1e3a5f] border-[#1e3a5f]" : "border-slate-300"}`}>
                               {checked && <Check className="h-2.5 w-2.5 text-white" />}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className={`text-xs font-medium truncate ${checked ? "text-[#0064d9]" : "text-slate-700"}`}>{sup.companyName}</p>
+                              <p className={`text-xs font-medium truncate ${checked ? "text-[#1e3a5f]" : "text-slate-700"}`}>{sup.companyName}</p>
                               {sup.categories.length > 0 && (
                                 <p className="text-[10px] text-slate-400 truncate">{sup.categories.map(c => c.name).join(" · ")}</p>
                               )}
@@ -1147,7 +1147,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
 
               <p className="text-[11px] text-slate-400">
                 {selectedSupplierIds.size > 0
-                  ? <><span className="font-semibold text-[#0064d9]">{selectedSupplierIds.size}</span> مورد محدد — سيُنشأ طلب تسعير واحد يُرسل لجميعهم</>
+                  ? <><span className="font-semibold text-[#1e3a5f]">{selectedSupplierIds.size}</span> مورد محدد — سيُنشأ طلب تسعير واحد يُرسل لجميعهم</>
                   : "لم يتم اختيار أي مورد بعد"}
               </p>
             </div>
@@ -1158,12 +1158,12 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
             <div className="space-y-4">
               {/* Summary panel */}
               <div className="border border-slate-200 rounded-sm overflow-hidden">
-                <div className="bg-[#dce3ec] px-3 py-2 text-[11px] font-semibold text-slate-700 border-b border-slate-300">ملخص الطلب</div>
+                <div className="bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-700 border-b border-slate-300">ملخص الطلب</div>
                 <div className="p-3 grid grid-cols-2 gap-2 text-[11px] bg-[#f8fafc]">
-                  <div><span className="text-slate-400">طلب تسعير العميل: </span><span className="font-semibold font-mono text-[#0064d9]">{foundCQ?.quotationNo || "—"}</span></div>
-                  <div><span className="text-slate-400">عدد البنود: </span><span className="font-semibold text-[#0064d9]">{selectedItems.length} بند</span></div>
+                  <div><span className="text-slate-400">طلب تسعير العميل: </span><span className="font-semibold font-mono text-[#1e3a5f]">{foundCQ?.quotationNo || "—"}</span></div>
+                  <div><span className="text-slate-400">عدد البنود: </span><span className="font-semibold text-[#1e3a5f]">{selectedItems.length} بند</span></div>
                   <div><span className="text-slate-400">رقم أمر الشراء: </span><span className="font-medium">{foundCQ?.customerOrderNo || "—"}</span></div>
-                  <div><span className="text-slate-400">عدد الموردين: </span><span className="font-semibold text-[#0064d9]">{totalUniqueSuppliers} مورد</span></div>
+                  <div><span className="text-slate-400">عدد الموردين: </span><span className="font-semibold text-[#1e3a5f]">{totalUniqueSuppliers} مورد</span></div>
                 </div>
 
                 {/* Items mini-table */}
@@ -1195,7 +1195,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                   {[...selectedSupplierIds].map(sid => {
                     const sup = suppliers.find(s => s.id === sid);
                     return sup ? (
-                      <span key={sid} className="px-2 py-0.5 text-[10px] font-semibold bg-[#0064d9]/10 text-[#0064d9] border border-[#0064d9]/20 rounded-sm">{sup.companyName}</span>
+                      <span key={sid} className="px-2 py-0.5 text-[10px] font-semibold bg-[#1e3a5f]/10 text-[#1e3a5f] border border-[#1e3a5f]/20 rounded-sm">{sup.companyName}</span>
                     ) : null;
                   })}
                 </div>
@@ -1239,9 +1239,9 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                 {/* Send status banner */}
                 {isSending && (
                   <div className="border border-blue-200 bg-blue-50 rounded-sm p-3 flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin text-[#0064d9] shrink-0" />
+                    <Loader2 className="h-4 w-4 animate-spin text-[#1e3a5f] shrink-0" />
                     <div>
-                      <p className="text-xs font-semibold text-[#0064d9]">جاري الإرسال التلقائي لجميع الموردين...</p>
+                      <p className="text-xs font-semibold text-[#1e3a5f]">جاري الإرسال التلقائي لجميع الموردين...</p>
                       <p className="text-[10px] text-blue-500">واتساب + إيميل</p>
                     </div>
                   </div>
@@ -1265,7 +1265,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                 )}
 
                 {/* Per-supplier table */}
-                <div className="text-[11px] font-semibold text-slate-600 border-r-2 border-[#0064d9] pr-2">تفاصيل الإرسال لكل مورد</div>
+                <div className="text-[11px] font-semibold text-slate-600 border-r-2 border-[#1e3a5f] pr-2">تفاصيل الإرسال لكل مورد</div>
                 <div className="border border-slate-200 rounded-sm overflow-hidden">
                   {(rfq.suppliers ?? []).map((sup: RfqSupplier, idx: number) => {
                     const result = resultMap.get(sup.supplierId);
@@ -1318,10 +1318,10 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                         {/* RFQ link */}
                         {sup.token && (
                           <div className="flex items-center gap-2 border-t border-slate-100 bg-[#f8fafc] px-3 py-1.5">
-                            <LinkIcon className="h-3 w-3 shrink-0 text-[#0064d9]" />
+                            <LinkIcon className="h-3 w-3 shrink-0 text-[#1e3a5f]" />
                             <span className="text-[10px] text-slate-400 font-mono truncate flex-1">{rfqLinkToUse}</span>
                             <button onClick={() => copyTokenLink(sup.token, setCopiedToken)}
-                              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-sm bg-white border border-slate-200 hover:border-[#0064d9] text-[10px] text-slate-500 hover:text-[#0064d9] shrink-0 transition-colors">
+                              className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-sm bg-white border border-slate-200 hover:border-[#1e3a5f] text-[10px] text-slate-500 hover:text-[#1e3a5f] shrink-0 transition-colors">
                               {copiedToken === sup.token ? <><Check className="h-2.5 w-2.5 text-emerald-600" /> تم</> : <><Copy className="h-2.5 w-2.5" /> نسخ</>}
                             </button>
                           </div>
@@ -1333,7 +1333,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
                             <MessageSquare className="h-3 w-3 text-emerald-600 shrink-0" />
                             <span className="text-[10px] text-emerald-700">واتساب API غير مُهيأ —</span>
                             <a href={result.whatsappFallbackLink} target="_blank" rel="noopener noreferrer"
-                              className="text-[10px] font-semibold text-[#0064d9] underline">فتح واتساب يدوياً</a>
+                              className="text-[10px] font-semibold text-[#1e3a5f] underline">فتح واتساب يدوياً</a>
                           </div>
                         )}
 
@@ -1365,7 +1365,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
               <button
                 disabled={(step === 1 && !foundCQ) || (step === 2 && selectedItemIds.size === 0) || (step === 3 && !step3Valid)}
                 onClick={() => goToStep(step + 1)}
-                className="flex items-center gap-1.5 px-4 py-1.5 bg-[#0064d9] hover:bg-[#0054b8] text-white text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed rounded-sm transition-colors">
+                className="flex items-center gap-1.5 px-4 py-1.5 bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed rounded-sm transition-colors">
                 التالي <ArrowLeft className="h-3.5 w-3.5" />
               </button>
             )}
@@ -1376,7 +1376,7 @@ function SendWizard({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
               </button>
             )}
             {step === 5 && (
-              <button onClick={onClose} className="px-4 py-1.5 bg-[#0064d9] hover:bg-[#0054b8] text-white text-xs font-semibold rounded-sm transition-colors">
+              <button onClick={onClose} className="px-4 py-1.5 bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-xs font-semibold rounded-sm transition-colors">
                 إغلاق
               </button>
             )}
@@ -1480,7 +1480,7 @@ function AddSupplierModal({ rfq, apiBase, onClose, onAdded }: {
             <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
             <input type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="بحث باسم الشركة..." dir="rtl"
-              className="w-full border border-slate-300 pr-8 pl-3 py-1.5 text-xs focus:outline-none focus:border-[#0064d9] focus:ring-1 focus:ring-[#0064d9]/30 rounded-sm bg-white" />
+              className="w-full border border-slate-300 pr-8 pl-3 py-1.5 text-xs focus:outline-none focus:border-[#1e3a5f] focus:ring-1 focus:ring-[#1e3a5f]/30 rounded-sm bg-white" />
             {search && (
               <button onClick={() => setSearch('')} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                 <X className="h-3 w-3" />
@@ -1497,7 +1497,7 @@ function AddSupplierModal({ rfq, apiBase, onClose, onAdded }: {
             }))].map(cat => (
               <button key={cat.id} onClick={() => setActiveCat(cat.id)}
                 className={`px-2.5 py-0.5 text-[10px] font-semibold border rounded-sm transition-all
-                  ${activeCat === cat.id ? 'bg-[#0f2240] text-white border-[#0f2240]' : 'bg-white text-slate-600 border-slate-300 hover:border-[#0064d9] hover:text-[#0064d9]'}`}>
+                  ${activeCat === cat.id ? 'bg-[#0f2240] text-white border-[#0f2240]' : 'bg-white text-slate-600 border-slate-300 hover:border-[#1e3a5f] hover:text-[#1e3a5f]'}`}>
                 {cat.name}
               </button>
             ))}
@@ -1507,14 +1507,14 @@ function AddSupplierModal({ rfq, apiBase, onClose, onAdded }: {
         {/* Select all bar */}
         {!loading && filtered.length > 0 && (
           <div className="mx-4 mt-2.5 flex items-center justify-between bg-[#f0f4f8] border border-slate-200 px-3 py-1.5 rounded-sm">
-            <button onClick={toggleAll} className="flex items-center gap-2 text-[11px] font-medium text-slate-600 hover:text-[#0064d9] transition-colors">
-              <div className={`h-4 w-4 rounded-sm border-2 flex items-center justify-center transition-colors ${allFilteredSelected ? 'bg-[#0064d9] border-[#0064d9]' : 'border-slate-400'}`}>
+            <button onClick={toggleAll} className="flex items-center gap-2 text-[11px] font-medium text-slate-600 hover:text-[#1e3a5f] transition-colors">
+              <div className={`h-4 w-4 rounded-sm border-2 flex items-center justify-center transition-colors ${allFilteredSelected ? 'bg-[#1e3a5f] border-[#1e3a5f]' : 'border-slate-400'}`}>
                 {allFilteredSelected && <Check className="h-2.5 w-2.5 text-white" />}
               </div>
               {allFilteredSelected ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
             </button>
             {selectedIds.size > 0 && (
-              <span className="text-[10px] font-bold text-[#0064d9] bg-blue-100 px-2 py-0.5 rounded-sm">{selectedIds.size} محدد</span>
+              <span className="text-[10px] font-bold text-[#1e3a5f] bg-blue-100 px-2 py-0.5 rounded-sm">{selectedIds.size} محدد</span>
             )}
           </div>
         )}
@@ -1535,11 +1535,11 @@ function AddSupplierModal({ rfq, apiBase, onClose, onAdded }: {
                   <div key={s.id} onClick={() => toggle(s.id)}
                     className={`flex items-center gap-2.5 px-4 py-2 cursor-pointer select-none border-b border-slate-100 last:border-0 transition-colors
                       ${checked ? 'bg-blue-50' : idx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/30 hover:bg-slate-50'}`}>
-                    <div className={`shrink-0 h-4 w-4 rounded-sm border-2 flex items-center justify-center transition-colors ${checked ? 'bg-[#0064d9] border-[#0064d9]' : 'border-slate-300'}`}>
+                    <div className={`shrink-0 h-4 w-4 rounded-sm border-2 flex items-center justify-center transition-colors ${checked ? 'bg-[#1e3a5f] border-[#1e3a5f]' : 'border-slate-300'}`}>
                       {checked && <Check className="h-2.5 w-2.5 text-white" />}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-medium ${checked ? 'text-[#0064d9]' : 'text-slate-800'}`}>{s.companyName}</p>
+                      <p className={`text-xs font-medium ${checked ? 'text-[#1e3a5f]' : 'text-slate-800'}`}>{s.companyName}</p>
                       {s.categories.length > 0 && (
                         <p className="text-[10px] text-slate-400">{s.categories.map(c => c.name).join(' · ')}</p>
                       )}
@@ -1555,7 +1555,7 @@ function AddSupplierModal({ rfq, apiBase, onClose, onAdded }: {
         <div className="border-t border-slate-200 px-4 py-3 flex items-center justify-between gap-3 bg-[#f8fafc]">
           <button onClick={onClose} className="px-4 py-1.5 border border-slate-300 bg-white text-xs text-slate-600 hover:bg-slate-50 rounded-sm transition-colors">إلغاء</button>
           <button onClick={handleAddSelected} disabled={adding || selectedIds.size === 0}
-            className="flex items-center gap-1.5 px-5 py-1.5 bg-[#0064d9] hover:bg-[#0054b8] text-white text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed rounded-sm transition-colors">
+            className="flex items-center gap-1.5 px-5 py-1.5 bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed rounded-sm transition-colors">
             {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
             {adding ? 'جاري الإضافة...' : selectedIds.size > 0 ? `إضافة ${selectedIds.size} مورد` : 'إضافة'}
           </button>
@@ -1618,7 +1618,7 @@ export default function SupplierQuotationsPage() {
             </p>
           </div>
           <button onClick={() => setWizardOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#0064d9] hover:bg-[#0054b8] text-white text-xs font-semibold rounded-sm transition-colors shadow-sm">
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-sm font-semibold rounded-md transition-colors shadow-sm">
             <Send className="h-3.5 w-3.5" /> إرسال طلب تسعير جديد
           </button>
         </div>
@@ -1631,7 +1631,7 @@ export default function SupplierQuotationsPage() {
             value={listSearch}
             onChange={e => setListSearch(e.target.value)}
             placeholder="بحث: رقم الطلب، طلب تسعير العميل، اسم المورد، رقم القطعة..."
-            className="w-full border border-slate-300 bg-white pr-9 pl-9 py-2 text-xs focus:border-[#0064d9] focus:outline-none focus:ring-1 focus:ring-[#0064d9]/30 rounded-sm"
+            className="w-full rounded-lg border border-slate-300 bg-white pr-9 pl-9 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-200"
             dir="rtl"
           />
           {listSearch && (
@@ -1663,7 +1663,7 @@ export default function SupplierQuotationsPage() {
             <p className="text-slate-600 font-semibold text-sm">لا توجد طلبات تسعير حتى الآن</p>
             <p className="text-slate-400 text-xs mt-1 mb-4">اضغط على الزر أعلاه لإرسال طلب تسعير جديد للموردين</p>
             <button onClick={() => setWizardOpen(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0064d9] hover:bg-[#0054b8] text-white text-xs font-semibold rounded-sm transition-colors">
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-xs font-semibold rounded-sm transition-colors">
               <Send className="h-3.5 w-3.5" /> إرسال طلب تسعير
             </button>
           </div>
@@ -1682,7 +1682,7 @@ export default function SupplierQuotationsPage() {
           <div className="border border-slate-200 rounded-sm overflow-hidden bg-white">
             <table className="w-full text-right text-xs">
               <thead>
-                <tr className="bg-[#dce3ec] border-b border-slate-300">
+                <tr className="bg-slate-50 border-b border-slate-300">
                   <TH className="w-8 text-center">▼</TH>
                   <TH>رقم الطلب</TH>
                   <TH>طلب تسعير العميل</TH>
@@ -1712,10 +1712,10 @@ export default function SupplierQuotationsPage() {
 
                         <td className="px-2 py-2.5 text-center text-slate-400">
                           {isExpanded
-                            ? <ChevronUp className="h-3.5 w-3.5 inline text-[#0064d9]" />
+                            ? <ChevronUp className="h-3.5 w-3.5 inline text-[#1e3a5f]" />
                             : <ChevronDown className="h-3.5 w-3.5 inline" />}
                         </td>
-                        <td className="px-3 py-2.5 font-bold text-[#0064d9] font-mono">{rfq.rfqNo}</td>
+                        <td className="px-3 py-2.5 font-bold text-[#1e3a5f] font-mono">{rfq.rfqNo}</td>
                         <td className="px-3 py-2.5 font-mono text-slate-600">{rfq.sourceQuotationNo || "—"}</td>
                         <td className="px-3 py-2.5 text-slate-500">{rfq.customerOrderNo || "—"}</td>
                         <td className="px-3 py-2.5 text-center font-mono text-slate-500">{rfq.requestDate}</td>
@@ -1759,17 +1759,17 @@ export default function SupplierQuotationsPage() {
                       {isExpanded && (
                         <tr className="border-b border-slate-200">
                           <td colSpan={10} className="p-0">
-                            <div className="bg-[#f8fafc] border-t-2 border-[#0064d9]/30 px-5 py-4 space-y-4">
+                            <div className="bg-[#f8fafc] border-t-2 border-[#1e3a5f]/30 px-5 py-4 space-y-4">
 
                               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                 {/* Items sub-table */}
                                 <div>
                                   <div className="flex items-center justify-between mb-2">
-                                    <p className="text-[11px] font-semibold text-slate-600 border-r-2 border-[#0064d9] pr-2">البنود ({rfq.items.length})</p>
+                                    <p className="text-[11px] font-semibold text-slate-600 border-r-2 border-[#1e3a5f] pr-2">البنود ({rfq.items.length})</p>
                                   </div>
                                   <div className="border border-slate-200 rounded-sm overflow-hidden">
                                     <table className="w-full text-[11px] text-right">
-                                      <thead className="bg-[#dce3ec] border-b border-slate-300">
+                                      <thead className="bg-slate-50 border-b border-slate-300">
                                         <tr>
                                           <TH className="w-7">#</TH>
                                           <TH>الوصف</TH>
@@ -1797,10 +1797,10 @@ export default function SupplierQuotationsPage() {
                                 {/* Suppliers sub-table */}
                                 <div>
                                   <div className="flex items-center justify-between mb-2">
-                                    <p className="text-[11px] font-semibold text-slate-600 border-r-2 border-[#0064d9] pr-2">الموردون ({rfq.suppliers.length})</p>
+                                    <p className="text-[11px] font-semibold text-slate-600 border-r-2 border-[#1e3a5f] pr-2">الموردون ({rfq.suppliers.length})</p>
                                     <div className="flex items-center gap-2">
                                       <button onClick={() => setAddingSupplierForRfq(rfq)}
-                                        className="flex items-center gap-1 px-2 py-0.5 border border-[#0064d9] bg-white hover:bg-blue-50 text-[#0064d9] text-[10px] font-semibold rounded-sm transition-colors">
+                                        className="flex items-center gap-1 px-2 py-0.5 border border-[#1e3a5f] bg-white hover:bg-blue-50 text-[#1e3a5f] text-[10px] font-semibold rounded-sm transition-colors">
                                         <UserPlus className="h-3 w-3" /> إضافة مورد
                                       </button>
                                       {submittedCount > 0 && (
@@ -1813,7 +1813,7 @@ export default function SupplierQuotationsPage() {
                                   </div>
                                   <div className="border border-slate-200 rounded-sm overflow-hidden">
                                     <table className="w-full text-[11px] text-right">
-                                      <thead className="bg-[#dce3ec] border-b border-slate-300">
+                                      <thead className="bg-slate-50 border-b border-slate-300">
                                         <tr>
                                           <TH>المورد</TH>
                                           <TH className="text-center">الحالة</TH>
@@ -1869,10 +1869,10 @@ export default function SupplierQuotationsPage() {
                                               <tr className={`border-b border-slate-100 ${idx % 2 === 0 ? "bg-[#fafbfc]" : "bg-slate-50/60"}`}>
                                                 <td colSpan={4} className="px-2 py-1.5">
                                                   <div className="flex items-center gap-2">
-                                                    <LinkIcon className="h-3 w-3 shrink-0 text-[#0064d9]" />
+                                                    <LinkIcon className="h-3 w-3 shrink-0 text-[#1e3a5f]" />
                                                     <span className="text-[10px] text-slate-400 font-mono truncate flex-1">{getRfqLink(sup.token)}</span>
                                                     <button onClick={() => copyTokenLink(sup.token, setCopiedToken)}
-                                                      className="flex items-center gap-0.5 px-1.5 py-0.5 border border-slate-200 bg-white hover:border-[#0064d9] hover:text-[#0064d9] text-[10px] text-slate-500 rounded-sm shrink-0 transition-colors">
+                                                      className="flex items-center gap-0.5 px-1.5 py-0.5 border border-slate-200 bg-white hover:border-[#1e3a5f] hover:text-[#1e3a5f] text-[10px] text-slate-500 rounded-sm shrink-0 transition-colors">
                                                       {copiedToken === sup.token ? <><Check className="h-2.5 w-2.5 text-emerald-600" /> تم</> : <><Copy className="h-2.5 w-2.5" /> نسخ الرابط</>}
                                                     </button>
                                                   </div>
