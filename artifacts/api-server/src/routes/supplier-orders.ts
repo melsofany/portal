@@ -30,10 +30,10 @@ import { Router } from "express";
     try {
       const supplierId = Number(req.query.supplierId);
       const customerOrderId = Number(req.query.customerOrderId);
-      if (!supplierId || !customerOrderId) return res.json({ found: false, rfqNo: null, items: [] });
+      if (!supplierId || !customerOrderId) return res.json({ found: false, rfqNo: null, items: [], coItemPrices: {} });
 
       const [co] = await db.select().from(customerOrdersTable).where(eq(customerOrdersTable.id, customerOrderId));
-      if (!co) return res.json({ found: false, rfqNo: null, items: [] });
+      if (!co) return res.json({ found: false, rfqNo: null, items: [], coItemPrices: {} });
 
       const coItems = await db.select().from(customerOrderItemsTable)
         .where(eq(customerOrderItemsTable.orderId, customerOrderId));
@@ -44,17 +44,17 @@ import { Router } from "express";
       if (quotationIds.length > 0) conditions.push(inArray(supplierQuotationsTable.sourceQuotationId, quotationIds));
       if (co.orderNo) conditions.push(ilike(supplierQuotationsTable.customerOrderNo, co.orderNo));
       if (co.customerPoNo) conditions.push(ilike(supplierQuotationsTable.customerOrderNo, co.customerPoNo));
-      if (conditions.length === 0) return res.json({ found: false, rfqNo: null, items: [] });
+      if (conditions.length === 0) return res.json({ found: false, rfqNo: null, items: [], coItemPrices: {} });
 
       const rfqs = await db.select().from(supplierQuotationsTable)
         .where(conditions.length === 1 ? conditions[0] : or(...conditions));
-      if (!rfqs.length) return res.json({ found: false, rfqNo: null, items: [] });
+      if (!rfqs.length) return res.json({ found: false, rfqNo: null, items: [], coItemPrices: {} });
 
       const rfqIds = rfqs.map(r => r.id);
       const rfqSuppliers = await db.select().from(supplierQuotationSuppliersTable).where(
         and(inArray(supplierQuotationSuppliersTable.rfqId, rfqIds), eq(supplierQuotationSuppliersTable.supplierId, supplierId))
       );
-      if (!rfqSuppliers.length) return res.json({ found: false, rfqNo: null, items: [] });
+      if (!rfqSuppliers.length) return res.json({ found: false, rfqNo: null, items: [], coItemPrices: {} });
 
       const respondedSupplier = rfqSuppliers.find(s => s.responseStatus === "submitted" || s.responseStatus === "responded") ?? rfqSuppliers[0];
       const matchedRfq = rfqs.find(r => r.id === respondedSupplier.rfqId)!;
@@ -69,14 +69,72 @@ import { Router } from "express";
       const priceMap = new Map<number, string>();
       prices.forEach(p => priceMap.set(p.rfqItemId, String(p.unitPrice ?? "0")));
 
+      // المطابقة بين بنود أمر العميل وبنود التسعير تتم على السيرفر
+      // نُرجع خريطة coItemId → unitPrice لتجنب مشاكل المطابقة النصية في الفرونتند
+      const rfqItemsWithPrice = rfqItems.map(it => ({
+        rfqItemId: it.id,
+        description: it.description,
+        partNo: it.partNo ?? "",
+        unit: it.unit ?? "",
+        customerItemCode: it.customerItemCode ?? "",
+        unitPrice: priceMap.get(it.id) ?? "0",
+      }));
+
+      // دالة المطابقة على السيرفر
+      function matchPrice(coDesc: string, coPartNo: string): string {
+        const desc = coDesc.trim().toLowerCase();
+        const part = coPartNo?.trim().toLowerCase() ?? "";
+        // 1. مطابقة تامة بالوصف
+        let hit = rfqItemsWithPrice.find(r => r.description.trim().toLowerCase() === desc);
+        // 2. مطابقة بـ Part No
+        if (!hit && part) hit = rfqItemsWithPrice.find(r => r.partNo.trim().toLowerCase() === part);
+        // 3. مطابقة جزئية
+        if (!hit) hit = rfqItemsWithPrice.find(r =>
+          r.description.trim().toLowerCase().includes(desc) ||
+          desc.includes(r.description.trim().toLowerCase())
+        );
+        // 4. مطابقة بـ customerItemCode إذا طابق الـ Part No
+        if (!hit && part) hit = rfqItemsWithPrice.find(r => r.customerItemCode.trim().toLowerCase() === part);
+        if (hit && parseFloat(hit.unitPrice) > 0) return parseFloat(hit.unitPrice).toFixed(3);
+        return "";
+      }
+
+      // بناء خريطة coItemId → unitPrice
+      const coItemPrices: Record<number, string> = {};
+      coItems.forEach(coItem => {
+        const price = matchPrice(coItem.description ?? "", coItem.partNo ?? "");
+        if (price) coItemPrices[coItem.id] = price;
+      });
+
+      // إذا فشلت المطابقة النصية كلياً لكن الأسعار موجودة → نطابق بالترتيب
+      const pricedRfqItems = rfqItemsWithPrice.filter(it => parseFloat(it.unitPrice) > 0);
+      const unmatchedCoItems = coItems.filter(it => !coItemPrices[it.id]);
+      if (Object.keys(coItemPrices).length === 0 && pricedRfqItems.length > 0) {
+        // مطابقة بالترتيب (كل بند CO مع نظيره في RFQ)
+        coItems.forEach((coItem, idx) => {
+          if (idx < rfqItemsWithPrice.length && parseFloat(rfqItemsWithPrice[idx].unitPrice) > 0) {
+            coItemPrices[coItem.id] = parseFloat(rfqItemsWithPrice[idx].unitPrice).toFixed(3);
+          }
+        });
+      } else if (unmatchedCoItems.length > 0 && pricedRfqItems.length > 0) {
+        // بعض البنود لم تُطابَق — نطابق المتبقية بالترتيب
+        const usedRfqIds = new Set(Object.values(coItemPrices));
+        const remainingRfq = rfqItemsWithPrice.filter(it =>
+          parseFloat(it.unitPrice) > 0 &&
+          !coItems.some(c => coItemPrices[c.id] && parseFloat(coItemPrices[c.id]) === parseFloat(it.unitPrice))
+        );
+        unmatchedCoItems.forEach((coItem, idx) => {
+          if (idx < remainingRfq.length) {
+            coItemPrices[coItem.id] = parseFloat(remainingRfq[idx].unitPrice).toFixed(3);
+          }
+        });
+      }
+
       res.json({
         found: true, rfqNo: matchedRfq.rfqNo,
         rfqSupplierId: respondedSupplier.id, responseStatus: respondedSupplier.responseStatus,
-        items: rfqItems.map(it => ({
-          rfqItemId: it.id, description: it.description,
-          partNo: it.partNo ?? "", unit: it.unit ?? "",
-          unitPrice: priceMap.get(it.id) ?? "0",
-        })),
+        items: rfqItemsWithPrice,
+        coItemPrices,  // الأسعار مفهرسة بـ CO item ID مباشرة
       });
     } catch (err) {
       req.log.error(err);

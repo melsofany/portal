@@ -23,8 +23,8 @@ import React, { useState, useMemo, useEffect } from "react";
     supplierId?: number;
     representativeName?: string; representativePhone?: string;
   }
-  interface RfqPriceItem { rfqItemId: number; description: string; partNo: string; unit: string; unitPrice: string; }
-  interface RfqPriceResult { found: boolean; rfqNo: string | null; rfqSupplierId: number | null; responseStatus: string; items: RfqPriceItem[]; }
+  interface RfqPriceItem { rfqItemId: number; description: string; partNo: string; unit: string; unitPrice: string; customerItemCode: string; }
+  interface RfqPriceResult { found: boolean; rfqNo: string | null; rfqSupplierId: number | null; responseStatus: string; items: RfqPriceItem[]; coItemPrices: Record<number, string>; }
 
   function statusBadge(s: string) {
     if (s === "مفتوح") return "bg-blue-100 text-blue-700";
@@ -154,26 +154,15 @@ import React, { useState, useMemo, useEffect } from "react";
         );
         const data: RfqPriceResult = await res.json();
         setRfqResult(data);
-        if (data.found && data.items.length > 0) {
-          setSelectedItems(prev => {
-            const updated = { ...prev };
-            co.items.forEach(coItem => {
-              const price = matchRfqPrice(coItem, data.items);
-              // فقط نضع السعر إذا كان من تسعير المورد — لا نستخدم سعر العميل
-              updated[coItem.id] = { ...updated[coItem.id], unitPrice: price };
-            });
-            return updated;
+        // السيرفر يُرجع خريطة coItemPrices مفهرسة بـ CO item ID مباشرة
+        setSelectedItems(prev => {
+          const updated = { ...prev };
+          co.items.forEach(coItem => {
+            const price = data.coItemPrices?.[coItem.id] ?? "";
+            updated[coItem.id] = { ...updated[coItem.id], unitPrice: price };
           });
-        } else {
-          // لا يوجد تسعير من المورد — نترك الحقل فارغاً
-          setSelectedItems(prev => {
-            const updated = { ...prev };
-            co.items.forEach(coItem => {
-              updated[coItem.id] = { ...updated[coItem.id], unitPrice: "" };
-            });
-            return updated;
-          });
-        }
+          return updated;
+        });
       } catch { setRfqResult(null); } finally { setRfqLoading(false); }
     }
 
