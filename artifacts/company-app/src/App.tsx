@@ -23,6 +23,7 @@ import EmployeesPage from "./pages/employees";
 import WhatsAppPage from "./pages/whatsapp";
 import PrivacyPolicyPage from "./pages/privacy-policy";
 import CompanySettingsPage from "./pages/company-settings";
+import CorrespondencePage from "./pages/correspondence";
 
 setBaseUrl(API_BASE || null);
 setAuthTokenGetter(() => {
@@ -103,6 +104,7 @@ function AppRoutes() {
       <Route path="/whatsapp"            component={() => <ProtectedRoute component={WhatsAppPage}             adminOnly                   />} />
       <Route path="/users"               component={() => <ProtectedRoute component={UsersPage}                adminOnly                   />} />
       <Route path="/settings"            component={() => <ProtectedRoute component={CompanySettingsPage}      permission="settings"       />} />
+      <Route path="/correspondence"      component={() => <ProtectedRoute component={CorrespondencePage}        permission="dashboard"      />} />
     </Switch>
   );
 }
