@@ -134,7 +134,19 @@ import { Router } from "express";
         found: true, rfqNo: matchedRfq.rfqNo,
         rfqSupplierId: respondedSupplier.id, responseStatus: respondedSupplier.responseStatus,
         items: rfqItemsWithPrice,
-        coItemPrices,  // الأسعار مفهرسة بـ CO item ID مباشرة
+        coItemPrices,
+        _debug: {
+          rfqId: matchedRfq.id,
+          respondedSupplierId: respondedSupplier.id,
+          responseStatus: respondedSupplier.responseStatus,
+          pricesCount: prices.length,
+          rfqItemsCount: rfqItems.length,
+          coItemsCount: coItems.length,
+          priceMapEntries: [...priceMap.entries()].map(([k,v]) => ({ rfqItemId: k, unitPrice: v })),
+          rfqItemsWithPrice: rfqItemsWithPrice.map(i => ({ id: i.rfqItemId, desc: i.description.substring(0,30), partNo: i.partNo, price: i.unitPrice })),
+          coItemsSample: coItems.map(i => ({ id: i.id, desc: (i.description ?? "").substring(0,30), partNo: i.partNo })),
+          allRfqSuppliers: rfqSuppliers.map(s => ({ id: s.id, supplierId: s.supplierId, status: s.responseStatus })),
+        }
       });
     } catch (err) {
       req.log.error(err);
