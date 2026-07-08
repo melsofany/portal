@@ -20,6 +20,7 @@ import { Router, type IRouter } from "express";
     import employeesRouter from "./employees";
     import usersRouter from "./users";
     import itemCodingRouter from "./item-coding";
+import correspondenceRouter from "./correspondence";
       import { requireAuth, requirePermission, requireAdmin } from "../middlewares/authMiddleware";
       import { eq } from "drizzle-orm";
         import { db } from "@workspace/db";
@@ -109,6 +110,7 @@ import { Router, type IRouter } from "express";
           } catch { res.json({ phone: "", fullName: "" }); }
         });
         router.use("/employees",              requirePermission("employees"),      employeesRouter);
+      router.use("/correspondence",          requirePermission("correspondence"),  correspondenceRouter);
       router.use("/users",                  requireAdmin,                        usersRouter);
 
       export default router;

@@ -6,7 +6,7 @@ import React, { ReactNode, useState, useRef, useEffect } from "react";
       LayoutDashboard, Users, Truck, FileText, ShoppingCart,
       PackageCheck, ReceiptText, Wallet, BarChart3, UserCog,
       MessageCircle, Building2, LogOut, List, Menu, X, Settings,
-      Camera, KeyRound, Eye, EyeOff, Check, Loader2,
+      Camera, KeyRound, Eye, EyeOff, Check, Loader2, Mail,
     } from "lucide-react";
     import {
       Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -30,6 +30,7 @@ import React, { ReactNode, useState, useRef, useEffect } from "react";
       { label: "التقارير",             path: "/reports",             icon: BarChart3,       permission: "reports"        },
       { label: "الموظفين",             path: "/employees",           icon: UserCog,         permission: "employees"      },
       { label: "الواتساب",             path: "/whatsapp",            icon: MessageCircle,   permission: "admin"          },
+      { label: "المراسلات والوثائق",   path: "/correspondence",     icon: Mail,            permission: "correspondence" },
       { label: "الإعدادات",            path: "/settings",            icon: Settings,        permission: "settings"       },
     ];
 
