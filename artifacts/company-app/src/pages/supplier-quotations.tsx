@@ -2036,7 +2036,7 @@ export default function SupplierQuotationsPage() {
                       {[
                         { label: "رقم الطلب",  cls: "" },
                         { label: "طلب العميل", cls: "" },
-                        { label: "أمر الشراء", cls: "" },
+                        { label: "رقم طلب تسعير العميل", cls: "" },
                         { label: "التاريخ",    cls: "text-center" },
                         { label: "البنود",     cls: "text-center w-16" },
                         { label: "الموردون",   cls: "text-center w-20" },
