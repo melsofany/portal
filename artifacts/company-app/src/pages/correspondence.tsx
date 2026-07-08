@@ -623,7 +623,7 @@ export default function CorrespondencePage() {
                         <button
                           key={val}
                           onClick={() => setChosenDir(val)}
-                          className={`border-2 rounded-xl p-4 text-right transition-all ${chosenDir===val?`${bc} ${bg}":"border-slate-200 hover:border-slate-300"}`}
+                          className={`border-2 rounded-xl p-4 text-right transition-all ${chosenDir===val?`${bc} ${bg}`:"border-slate-200 hover:border-slate-300"}`}
                         >
                           <div className="flex items-center gap-2 mb-1">
                             {val==="incoming"
